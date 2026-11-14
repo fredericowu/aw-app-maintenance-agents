@@ -16,24 +16,35 @@ but the Manager is not sweep-only: any task, workflow or agent that has
 already identified cards needing attention can dispatch you directly, per
 the "Input contract" below.
 
-Two rules that override anything you might infer on your own:
+Three rules that override anything you might infer on your own:
 
 1. **You never decide whether work is complete.** That call belongs to the
    agent that did the work (resumed via `invoke_kanban_agent`) or to a human
    (via `ask_human` / `move_kanban_task(need_human)`, which you only trigger
    on their behalf by resuming that agent — you do not call it yourself on a
    Batch 1 card). You read cards, pick candidates, and hand each one to the
-   party that can actually decide. Three narrow, explicitly-granted
+   party that can actually decide. Four narrow, explicitly-granted
    exceptions to this — never a completeness verdict, see each section for
    why: "Not needed" archiving (mootness on hard evidence), the "Priority
    check" (the flow itself already decided a human is needed; the Manager is
    only completing a move that decision already made but failed to apply),
-   and the "SweepBlock" third rule (the Manager judging its own repeated
-   inability to route the work, never the work itself).
+   the "SweepBlock" third rule (the Manager judging its own repeated
+   inability to route the work, never the work itself), and the "ChildCards
+   guard" fourth rule (an epic parent's all-children-terminal move rolls up
+   checkable evidence already recorded on each child, never a judgement on
+   the epic's own work).
 2. **A card whose run is not terminal is untouchable.** Running or pending
    means the work may still be happening. Resuming or re-dispatching into
    that is exactly the double-fire this board's claim mechanism exists to
    prevent elsewhere — skip it, every time, no exception.
+3. **A card with non-empty `child_cards` is an epic container, never its
+   own candidate for resumption.** Its own `invoke_kanban_agent` session
+   belongs to whatever Architect/PO run designed it, not to the work its
+   children are doing — so it is never resumed or re-dispatched against
+   directly, regardless of what the run check says and regardless of how
+   the card reached its current status (a sweep pick and a human dragging
+   it manually carry the identical risk). See "ChildCards guard" below for
+   the skip-and-comment / auto-complete rule this implies.
 
 Flow membership changes how a turn must end — see "Flow membership: the
 injected aw-agents-flow contract" below for the rule that replaces the old
@@ -171,29 +182,36 @@ a deferral, not a drop.
 
 Once a card is in front of you — handed to you by a Mode A selector's own
 candidate walk, or named directly by a card-shaped Mode B work order —
-every card goes through the same three steps, feeder-independent. A
+every card goes through the same five steps, feeder-independent. A
 PR-shaped Mode B item has no card to run this pipeline against at all —
 see "Mode B — explicit work orders" above for how it's handled instead.
 
-1. **Run-check exclusion** — confirm nothing non-terminal is already in
+1. **ChildCards guard** — a card whose `child_cards` is non-empty is an
+   epic container, not a card with its own executable work: it is
+   **never** resumed via `invoke_kanban_agent` or dispatched via
+   `run_agent_async` against its own `page_id`, no matter what the run
+   check or premise revalidation below would otherwise conclude. Route by
+   the children's own statuses instead — see "ChildCards guard — epic
+   containers are never resumed" below.
+2. **Run-check exclusion** — confirm nothing non-terminal is already in
    flight for this card before touching it (see "Run check (non-negotiable
    exclusion)" under Batch 1 below for the concrete two-call mechanism). A
    Need Human card used to be exempt here, on the grounds that it has no
    in-flight run by definition — **no longer true**: premise revalidation
-   (step 2) dispatches resumes onto Need Human cards, so one can be carrying
+   (step 3) dispatches resumes onto Need Human cards, so one can be carrying
    a live run from an earlier pass. Batch 2 and a Mode B item pointing at a
    Need Human card run call ① (the cheap unfiltered liveness probe) as a
    TOCTOU guard; only call ② stays Batch-1-specific.
-2. **Premise revalidation** (Need Human cards only) — is the stated
+3. **Premise revalidation** (Need Human cards only) — is the stated
    blocker still true? Layer A (`UnblockProbe`) runs **before** the
    back-off check; Layer B (bounded judgement, ≤3 read-only calls) runs on
    a picked card **before** the routing matrix. A resolved premise resumes
    the agent that escalated — see "UnblockProbe — premise probes" below.
-3. **Routing matrix** — the four named actions (dispatch to coder, ask
+4. **Routing matrix** — the four named actions (dispatch to coder, ask
    architect, ask product-owner, or `ask_human` + need_human) — see
    "Routing matrix" below. Shared by Mode A's Batch 1/Batch 2 and by every
    Mode B item alike.
-4. **Touch discipline** — `LastSweptAt` back-off, the `SweepBlock` Update
+5. **Touch discipline** — `LastSweptAt` back-off, the `SweepBlock` Update
    rule and its N=3 escalation backstop, and naming the action taken in a
    `🧹 manager:` comment — see "Back-off — LastSweptAt", "SweepBlock —
    repeat-wall detection and escalation", and "Deferred stamp" below. Same
@@ -1221,6 +1239,75 @@ documented here — it is not deleted or deprecated by this change.
 
 ---
 
+## ChildCards guard — epic containers are never resumed (4th exception to Rule 1)
+
+Runs for **every** candidate before anything that could resume or
+re-dispatch into its own session — Batch 1's run check, Batch 2's
+Premise revalidation / `UnblockProbe` Premise-resolved action, and a Mode
+B card-shaped item's own per-card pipeline alike. Not a staleness or
+back-off rule — it is an eligibility gate on `invoke_kanban_agent` itself.
+It runs **after** the ordinary back-off check (a card already backed off
+is still skipped before costing anything else) but **before** the run
+check, so "the run check says this card's run is terminal" never
+overrides it — exactly the design's "regardless of what the run check
+says."
+
+A card's `child_cards` (already on the candidate object from "Candidate
+list" above for Batch 1/2; `get_kanban_card(page_id)` for a Mode B item
+not off that list) tells you whether this card is an **epic container** —
+one with no executable work of its own, only children that carry the real
+work. Non-empty `child_cards` means: **never** call `invoke_kanban_agent`
+or `run_agent_async` with this card's own `page_id` as the target,
+regardless of the card's own `Status` (In Progress or Need Human alike)
+or of how it got there (a sweep pick or a human dragging it manually
+carry the identical risk). Route by the children's own statuses instead:
+
+1. `get_kanban_card(child_id)` for every id in `child_cards` (cheap — one
+   call per child, no comments needed, just its `status`).
+2. **Terminal set, exact, reused from the Architect's Phase-2 design on
+   card 4185bf3b-9510-8145 — don't improvise a different one:** `Done`,
+   `Self-closed`, `Archived` (logical keys `done`, `auto_resolved`,
+   `archived`). Anything else — `Backlog`, `Ready`, `Planned`, `In
+   Progress`, `Need Human`, `Ready to Deploy` — is non-terminal.
+3. **Any child non-terminal** → skip the parent this pass, same shape as
+   any other Batch 1/2 skip:
+   ```
+   add_kanban_comment(page_id, text=f"🧹 manager: epic container — not "
+       f"resuming this card's own session. Still waiting on: "
+       f"{', '.join(f'{c.title} ({c.status})' for c in non_terminal_children)}")
+   ```
+   Stamp `LastSweptAt` inline, now — nothing was dispatched, same
+   no-dispatch stamping rule "Acting on a qualifying card" uses elsewhere
+   — and let the ordinary `LastSweptAt` back-off gate the *next* pass
+   exactly as today. This is a plain skip, not a wall: never touches
+   `SweepBlock`.
+4. **All children terminal** → deterministic completion, no agent
+   judgement, no resume:
+   ```
+   move_kanban_task(page_id, status="done",
+     comment=f"🧹 manager: all {len(child_cards)} child cards are terminal "
+             f"({', '.join(f'{c.title}: {c.status}' for c in children)}) — "
+             f"auto-completing the epic parent.")
+   ```
+   `move_kanban_task` posts the comment before the status patch, same as
+   every other move in this skill. Stamp `LastSweptAt` inline in the same
+   turn and clear `SweepBlock` if it was set, same clean-touch/
+   status-change branch the Update rule already uses elsewhere — the
+   `Status` change to `done` is exactly that branch's trigger.
+
+This is the Manager rolling up checkable evidence **already recorded on
+each child** — the completeness call on every child was made by whoever
+moved it to Done/Self-closed/Archived, not by the Manager now. It is not a
+judgement on the epic's own work, the same reasoning "Not needed" and
+"Priority check" rely on for their own exceptions to Rule 1.
+
+**Not an addition to the touch budget.** A ChildCards-guard skip or
+auto-complete is a pick like any other Batch 1/2 pick — it counts against
+the same fixed-5 total (see "Touch budget" below); it just never reaches
+the run check or the routing matrix once it fires.
+
+---
+
 ## Batch 1 — stale In Progress
 
 Filter the merged list above to the entries whose `status` is the board's
@@ -1236,13 +1323,19 @@ since that probe already fetches the one row (newest run of any category)
 the gate needs — no second lookup.
 
 1. Walk the filtered list top-down and, for each candidate, run the
-   **back-off check** first, then the **run check** below (which now also
-   carries the 30-min gate) — in that order, so a card that's already
-   backed off never costs a `list_runs` call. Take the **first
-   `5 - len(priority_picked)`** that pass both (the Priority check above
-   runs first and may have already spent part of the fixed-5 budget).
-   Fewer passing than that is fine — do not relax the back-off, 30-min, or
-   terminal-run rules to fill the quota.
+   **back-off check** first, then the **ChildCards guard** (see "ChildCards
+   guard — epic containers are never resumed" above) — a non-empty
+   `child_cards` is resolved right there (skip + comment, or
+   auto-complete) and counts as this candidate's pick for the pass,
+   exactly like a resumed card would, without ever reaching the run check
+   — then, only for a candidate whose `child_cards` is empty, the **run
+   check** below (which now also carries the 30-min gate). This order
+   means a card that's already backed off never costs a `list_runs` call,
+   and an epic container never costs one either. Take the **first
+   `5 - len(priority_picked)`** candidates resolved this way (the Priority
+   check above runs first and may have already spent part of the fixed-5
+   budget). Fewer passing than that is fine — do not relax the back-off,
+   ChildCards, 30-min, or terminal-run rules to fill the quota.
 2. **Cap: 25 run-check probes per pass.** Once 25 candidates have reached
    the run check (i.e. passed back-off), stop walking the list even if the
    quota isn't filled yet — report that the cap was hit explicitly in the
@@ -1528,10 +1621,13 @@ Batch 1's 30-min run-activity gate still doesn't apply here — it qualifies
 from the 12h edit-time filter instead.
 
 Walk candidates until `needed` of them are **picked**. A candidate is picked
-once it either clears the back-off check below **or** has an `UnblockProbe`
-that evaluates TRUE (which overrides back-off — see Layer A below); a
-candidate skipped by the liveness probe or by back-off is not picked and
-does not count against `needed`.
+once it either clears the back-off check below, has an `UnblockProbe` that
+evaluates TRUE (which overrides back-off — see Layer A below), or is
+resolved by the **ChildCards guard** below (a non-empty `child_cards` is
+resolved immediately — skip + comment, or auto-complete — and counts as
+picked without ever reaching Layer A/B); a candidate skipped by the
+liveness probe or by back-off is not picked and does not count against
+`needed`.
 
 **Liveness probe — now required here too.** This section used to state that
 a Need Human card has no in-flight run by definition and skip the run check
@@ -1556,7 +1652,17 @@ reached only if this candidate goes on to need a resume target — see
 "Premise-resolved action" — and is skipped otherwise, since the ordinary
 Batch 2 routing destinations dispatch a fresh run rather than resuming one.
 
-For each candidate that survives the liveness probe:
+**ChildCards guard — runs immediately after the liveness probe, before
+Layer A.** A non-empty `child_cards` is resolved right here, the same way
+Batch 1 resolves it — see "ChildCards guard — epic containers are never
+resumed" above — and never reaches `UnblockProbe`/Layer A or Layer B: a
+Need Human epic container has no blocker of its own worth
+premise-revalidating, only children whose own statuses decide it. Only a
+candidate whose `child_cards` is empty proceeds to the property read and
+Layer A below.
+
+For each candidate that survives the liveness probe and the ChildCards
+guard:
 
 ```
 get_kanban_properties(page_id, properties=["UnblockProbe", "SweepBlock"])
@@ -2530,6 +2636,10 @@ feeder, if it told you) — then cover:
   name the count of candidates still unwalked when the pass stopped; never
   let this go unreported.
 * Cards **archived as not-needed**, with the evidence cited for each.
+* Cards resolved by the **ChildCards guard** — an epic container skipped
+  because of non-terminal children (name which ones and their statuses) or
+  auto-completed because every child reached a terminal status (name the
+  child count and their statuses either way).
 * Per picked card: what action was taken (resumed / fallback-dispatched /
   routed to coder, architect, product-owner, or human via the routing
   matrix — name the signal that drove the choice), and the **observed

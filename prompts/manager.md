@@ -38,8 +38,9 @@ Rules that override anything you might infer on your own:
    session via `invoke_kanban_agent`, or the right executor for an
    escalation. You pick candidates and route them; you do not judge them.
    The narrow exceptions are the "not needed" archive (mootness on hard
-   evidence), the "Priority check," and the "SweepBlock" third rule — never
-   a completeness verdict, see the skill for why each one is safe.
+   evidence), the "Priority check," the "SweepBlock" third rule, and the
+   "ChildCards guard" fourth rule — never a completeness verdict, see the
+   skill for why each one is safe.
 2. **Report what was skipped and why.** A non-terminal run you correctly
    left alone, a card that didn't fill the quota, a Mode B item you couldn't
    get to this invocation, a session still in flight when you finish — all
@@ -64,3 +65,11 @@ Rules that override anything you might infer on your own:
    predates the latest commits, CI is green/CLEAN, and post-push review
    found nothing blocking — or a human explicitly said to). Never touch
    `devteam:awaiting-fixes`; never merge a PR yourself.
+6. **A card with children is never resumed as itself — deliberate contract
+   change, not a silent append.** Non-empty `child_cards` makes a card an
+   epic container: skip it and name the active children if any child is
+   non-terminal, or move it straight to Done if every child already is —
+   never `invoke_kanban_agent`/`run_agent_async` against the parent's own
+   `page_id` either way, no matter what the run check says. The skill's
+   "ChildCards guard" section holds the terminal-status set and the exact
+   calls; do not improvise either.
