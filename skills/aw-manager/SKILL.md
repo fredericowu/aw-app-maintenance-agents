@@ -123,7 +123,10 @@ the feeder's name alone, since one feeder (`work_loop`, below) emits both:
   * `suggested_action` (optional) — a hint, not a directive. The per-card
     pipeline still makes its own routing-matrix judgment; a
     `suggested_action` that conflicts with the signals you actually see on
-    the card does not bind you.
+    the card does not bind you. Note that Mode B work orders omit
+    `child_cards`, so you **must** call `get_kanban_card(page_id)` for every
+    card-shaped Mode B item before acting on `suggested_action` (see the
+    ChildCards guard below).
 * **PR-shaped** (an open pull request, no Kanban card at all):
   * `pr` (required) — the PR identifier, e.g. `owner/repo#123`.
   * `url` (required) — the PR's URL.
@@ -158,6 +161,15 @@ protocol. `suggested_action` arrives as either `"resume via
 invoke_kanban_agent run_id=<run_id>"` or `"needs routing — no prior run to
 resume"` — still a hint, not a directive; the per-card pipeline still makes
 its own routing-matrix judgment per the general Mode B rule above.
+**Important for epic parents:** `work_loop(loops=["attention"])`
+(`agents_platform_runners_app/work_loop.py`) checks run activity without
+inspecting `child_cards` and emits `"resume via invoke_kanban_agent
+run_id=<resume_run_id>"` even for an epic container whose Architect/PO run
+has finished, while its `work_orders` payload omits `child_cards`. Never
+treat `suggested_action` as an exemption to the ChildCards guard: always
+call `get_kanban_card(page_id)` first on every card-shaped Mode B item, and
+if `child_cards` is non-empty, let the ChildCards guard override
+`suggested_action` (never call `invoke_kanban_agent` against the parent).
 
 `work_loop(loops=["prs"])` (card 4175bf3b-9510-8163) is the same feeder's
 PR-shaped side — it emits the PR shape above, `evidence` reading e.g.
@@ -190,9 +202,13 @@ see "Mode B — explicit work orders" above for how it's handled instead.
    epic container, not a card with its own executable work: it is
    **never** resumed via `invoke_kanban_agent` or dispatched via
    `run_agent_async` against its own `page_id`, no matter what the run
-   check or premise revalidation below would otherwise conclude. Route by
-   the children's own statuses instead — see "ChildCards guard — epic
-   containers are never resumed" below.
+   check, premise revalidation, or a Mode B `suggested_action` would
+   otherwise conclude. For Mode B items (whose payloads omit
+   `child_cards`), call `get_kanban_card(page_id)` here to inspect
+   `child_cards` first, and evaluate the ordinary `LastSweptAt` back-off
+   check before firing the guard (in Batch 2, after the liveness probe call
+   ①). Route by the children's own statuses instead — see "ChildCards
+   guard — epic containers are never resumed" below.
 2. **Run-check exclusion** — confirm nothing non-terminal is already in
    flight for this card before touching it (see "Run check (non-negotiable
    exclusion)" under Batch 1 below for the concrete two-call mechanism). A
@@ -1244,23 +1260,33 @@ documented here — it is not deleted or deprecated by this change.
 Runs for **every** candidate before anything that could resume or
 re-dispatch into its own session — Batch 1's run check, Batch 2's
 Premise revalidation / `UnblockProbe` Premise-resolved action, and a Mode
-B card-shaped item's own per-card pipeline alike. Not a staleness or
-back-off rule — it is an eligibility gate on `invoke_kanban_agent` itself.
-It runs **after** the ordinary back-off check (a card already backed off
-is still skipped before costing anything else) but **before** the run
-check, so "the run check says this card's run is terminal" never
-overrides it — exactly the design's "regardless of what the run check
-says."
+B card-shaped item's `suggested_action` / routing alike. Not a staleness
+or back-off rule — it is an eligibility gate on `invoke_kanban_agent`
+itself. It runs **after** the ordinary `LastSweptAt` back-off check (a
+card already backed off is still skipped before reading children or
+commenting — in Batch 2, after the liveness probe call ①, evaluate
+`LastSweptAt` back-off before firing the guard) and **before** any step
+that would pick a resume or dispatch target (Batch 1's run check, Batch
+2's Layer A/B premise revalidation, and Mode B's `suggested_action` /
+routing matrix), so "the run check says this card's run is terminal" or
+an upstream Mode B `suggested_action` never overrides it — exactly the
+design's "regardless of what the run check says."
 
 A card's `child_cards` (already on the candidate object from "Candidate
-list" above for Batch 1/2; `get_kanban_card(page_id)` for a Mode B item
-not off that list) tells you whether this card is an **epic container** —
-one with no executable work of its own, only children that carry the real
-work. Non-empty `child_cards` means: **never** call `invoke_kanban_agent`
-or `run_agent_async` with this card's own `page_id` as the target,
-regardless of the card's own `Status` (In Progress or Need Human alike)
-or of how it got there (a sweep pick or a human dragging it manually
-carry the identical risk). Route by the children's own statuses instead:
+list" above for Batch 1/2; **must** be fetched via
+`get_kanban_card(page_id)` for every card-shaped Mode B item, since Mode
+B payloads omit `child_cards` — and fetch `LastSweptAt` via
+`get_kanban_properties(page_id, properties=["LastSweptAt"])` for the
+back-off check when the item did not come off that list) tells you
+whether this card is an **epic container** — one with no executable work
+of its own, only children that carry the real work. Non-empty
+`child_cards` means: **never** call `invoke_kanban_agent` or
+`run_agent_async` with this card's own `page_id` as the target,
+regardless of the card's own `Status` (In Progress or Need Human alike),
+of any Mode B `suggested_action` (e.g. `work_loop`'s `"resume via
+invoke_kanban_agent run_id=..."`), or of how the card got there (a sweep
+pick or a human dragging it manually carry the identical risk). Route by
+the children's own statuses instead:
 
 1. `get_kanban_card(child_id)` for every id in `child_cards` (cheap — one
    call per child, no comments needed, just its `status`).
@@ -1282,7 +1308,13 @@ carry the identical risk). Route by the children's own statuses instead:
    exactly as today. This is a plain skip, not a wall: never touches
    `SweepBlock`.
 4. **All children terminal** → deterministic completion, no agent
-   judgement, no resume:
+   judgement, no resume — **subject to Notion's 25-relation truncation
+   guard:** Notion page objects truncate relation arrays at 25 items
+   (`has_more=true`), and `aw-app-notion`'s `extract_property_value`
+   (`notion_app/kanban/client.py`) discards `has_more`, capping
+   `child_cards` at 25 entries. Therefore, **auto-complete only when
+   `len(child_cards) < 25`** (or when pagination / `has_more == false`
+   affirmatively confirms all children were read):
    ```
    move_kanban_task(page_id, status="done",
      comment=f"🧹 manager: all {len(child_cards)} child cards are terminal "
@@ -1294,6 +1326,20 @@ carry the identical risk). Route by the children's own statuses instead:
    turn and clear `SweepBlock` if it was set, same clean-touch/
    status-change branch the Update rule already uses elsewhere — the
    `Status` change to `done` is exactly that branch's trigger.
+
+   **When `len(child_cards) >= 25` and `has_more == false` cannot be
+   verified** (and all 25 returned children are terminal — if any visible
+   child is non-terminal, skip normally under step 3 above): **do not
+   auto-complete to Done**, because children 26+ may still be
+   non-terminal. Withhold the status move, post a skip comment naming the
+   25-relation truncation cap, stamp `LastSweptAt` inline (never touches
+   `SweepBlock`), and report it in the pass report:
+   ```
+   add_kanban_comment(page_id, text="🧹 manager: epic container has 25 "
+       "returned child cards (all terminal), hitting Notion's 25-relation "
+       "truncation cap without has_more=false confirmation — withholding "
+       "auto-completion and not resuming this card's own session.")
+   ```
 
 This is the Manager rolling up checkable evidence **already recorded on
 each child** — the completeness call on every child was made by whoever
@@ -1337,10 +1383,13 @@ the gate needs — no second lookup.
    budget). Fewer passing than that is fine — do not relax the back-off,
    ChildCards, 30-min, or terminal-run rules to fill the quota.
 2. **Cap: 25 run-check probes per pass.** Once 25 candidates have reached
-   the run check (i.e. passed back-off), stop walking the list even if the
-   quota isn't filled yet — report that the cap was hit explicitly in the
-   pass report, never silently. A candidate that fails the back-off check
-   doesn't count against this cap, since it never reaches the run check.
+   the run check (i.e. passed back-off and had empty `child_cards`), stop
+   walking the list even if the quota isn't filled yet — report that the
+   cap was hit explicitly in the pass report, never silently. A candidate
+   that fails the back-off check **or is resolved by the ChildCards
+   guard** doesn't count against this cap, since it never reaches the run
+   check (a ChildCards-resolved candidate already counts against the
+   5-card touch quota above).
    **Currently unreachable, not dead:** the merged list above is fetched
    with `limit=10`, shared across both batches, so Batch 1 never sees more
    than 10 candidates total and this cap cannot bind today. Left in place
@@ -1621,13 +1670,13 @@ Batch 1's 30-min run-activity gate still doesn't apply here — it qualifies
 from the 12h edit-time filter instead.
 
 Walk candidates until `needed` of them are **picked**. A candidate is picked
-once it either clears the back-off check below, has an `UnblockProbe` that
-evaluates TRUE (which overrides back-off — see Layer A below), or is
-resolved by the **ChildCards guard** below (a non-empty `child_cards` is
-resolved immediately — skip + comment, or auto-complete — and counts as
-picked without ever reaching Layer A/B); a candidate skipped by the
-liveness probe or by back-off is not picked and does not count against
-`needed`.
+once it either clears the back-off check (including an epic container with
+non-empty `child_cards` that cleared back-off and is then resolved by the
+**ChildCards guard** below — skip + comment, or auto-complete — without
+ever reaching Layer A/B) **or** has an `UnblockProbe` that evaluates
+TRUE (which overrides back-off — see Layer A below); a candidate skipped
+by the liveness probe or by back-off is not picked and does not count
+against `needed`.
 
 **Liveness probe — now required here too.** This section used to state that
 a Need Human card has no in-flight run by definition and skip the run check
@@ -1652,14 +1701,21 @@ reached only if this candidate goes on to need a resume target — see
 "Premise-resolved action" — and is skipped otherwise, since the ordinary
 Batch 2 routing destinations dispatch a fresh run rather than resuming one.
 
-**ChildCards guard — runs immediately after the liveness probe, before
-Layer A.** A non-empty `child_cards` is resolved right here, the same way
-Batch 1 resolves it — see "ChildCards guard — epic containers are never
-resumed" above — and never reaches `UnblockProbe`/Layer A or Layer B: a
-Need Human epic container has no blocker of its own worth
-premise-revalidating, only children whose own statuses decide it. Only a
-candidate whose `child_cards` is empty proceeds to the property read and
-Layer A below.
+**ChildCards guard — runs immediately after the liveness probe and back-off
+check, before Layer A.** For a candidate with non-empty `child_cards`,
+evaluate the ordinary `LastSweptAt` back-off check first (using
+`last_swept_at` already on the candidate and, when set and `< 48h`,
+`get_kanban_card(page_id, include_comments=true)` — a card already backed
+off is skipped with `"backed off: last swept <ts>, no comment since"`
+before reading children or posting any comment, and does not count
+against `needed`). For a candidate clearing back-off, a non-empty
+`child_cards` is resolved right here, the same way Batch 1 resolves it —
+see "ChildCards guard — epic containers are never resumed" above — and
+never reaches `UnblockProbe`/Layer A or Layer B: a Need Human epic
+container has no blocker of its own worth premise-revalidating, only
+children whose own statuses decide it. Only a candidate whose
+`child_cards` is empty proceeds to the property read and Layer A below
+(where a TRUE `UnblockProbe` can still override back-off).
 
 For each candidate that survives the liveness probe and the ChildCards
 guard:
