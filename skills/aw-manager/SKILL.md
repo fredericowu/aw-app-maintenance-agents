@@ -445,7 +445,6 @@ create_kanban_task(
               f"consecutive failure(s), latest at {flow['latest_run_url']}",
   plan=f"Latest run: {flow['latest_run_url']}. Diagnose and fix the "
        f"workflow so the next run on {flow['default_branch']} is green.",
-  agent_group_slug="coders",
   source="manager",
   plan_slug="github-maintenance",
   target_slug="github-maintenance-plan",
