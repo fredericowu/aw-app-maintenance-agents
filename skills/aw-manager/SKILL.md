@@ -341,7 +341,7 @@ never written. For each PR:
 
 ```
 run_agent_async(
-  slug="coder-sonnet",
+  group_slug="coders",
   input=f"PR {pr['url']} ({pr['repo']}#{pr['number']}) has failing CI "
         f"({pr['attention_reason']}). Expected end state: tests green "
         f"and the PR merged, or — if not salvageable — closed with an "
@@ -379,7 +379,7 @@ because the repo isn't tekflox-owned — see
 * Known author (see below) → dispatch a coder to merge:
   ```
   run_agent_async(
-    slug="coder-sonnet",
+    group_slug="coders",
     input=f"PR {pr['url']} is ready-to-merge ({pr['attention_reason']}) "
           f"— CI green, approved, author {pr['author']} is a known team "
           f"member/bot. Merge it (the repo's own merge convention) and "
@@ -423,6 +423,15 @@ gh pr view <pr.url> --json author,authorAssociation
 Never guess past an ambiguous or failed read — that falls through to
 `ask_human` in (c), never to a merge.
 
+Resolve automatic implementation handoffs with `run_agent_async(group_slug="coders", ...)`.
+The backend reads the tenant's saved default for this workspace on each dispatch.
+Use `get_group_default(group_slug="coders")` when a concrete slug is required
+(e.g. a new card's `agent_slug`); omit that field to let Ready-card dispatch
+resolve the default later. Never invent a member when no default is configured.
+Explicitly selected card agents/workflows and existing-session resumes retain
+their selected agent. QA handoffs use `group_slug="qas"` only after merge and
+verified deployment; exact `qa` and `qa-*` share deduplication protections.
+
 #### Per failing flow
 
 Walk `failing_flows` in the order the gate returns them. For each:
@@ -436,7 +445,7 @@ create_kanban_task(
               f"consecutive failure(s), latest at {flow['latest_run_url']}",
   plan=f"Latest run: {flow['latest_run_url']}. Diagnose and fix the "
        f"workflow so the next run on {flow['default_branch']} is green.",
-  agent_slug="coder-sonnet",
+  agent_group_slug="coders",
   source="manager",
   plan_slug="github-maintenance",
   target_slug="github-maintenance-plan",
