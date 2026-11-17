@@ -134,9 +134,7 @@
           "model_slug": "claude-runner-sonnet",
           "disable_harness_tools": true,
           "agent_config_slug": "maintenance-agents-config",
-          "skill_slugs": [
-            "aw-manager"
-          ],
+          "skill_slugs": [],
           "capabilities": "Takes a named selector (e.g. the stale-card sweep) or an explicit work-order list, and for each card checks whether anything is still in flight, routes it to the named actor the routing matrix calls for (coder/architect/product-owner/human), and manages devteam:* tag authority. Read-only with respect to code; calls mark_flow_done only on a card-less run, never on a run that carries a Kanban card.",
           "use_cases": [
             "run the stale-card sweep",

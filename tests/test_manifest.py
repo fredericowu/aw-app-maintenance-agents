@@ -148,3 +148,14 @@ def test_the_skill_does_not_carry_monolith_paths_or_secrets():
     assert "127.0.0.1:9123" not in text
     assert "127.0.0.1:10005" not in text
     assert "/opt/aw-workspace" in text
+
+
+def test_manager_loads_its_contract_at_runtime(manifest):
+    manager = next(a for a in manifest["contributes"]["agents"]["agents"]
+                   if a["slug"] == "manager")
+    assert not manager.get("skill_slugs"), "Manager skills must not be eagerly injected"
+    prompt = (APP_DIR / manager["system_prompt_file"]).read_text()
+    skill = next(s for s in manifest["contributes"]["skills"] if s["id"] == "aw-manager")
+    assert (APP_DIR / skill["path"]).is_file()
+    assert "/opt/aw-workspace/skills/aw-manager/SKILL.md" in prompt
+    assert len(prompt.encode("utf-8")) < 2048
