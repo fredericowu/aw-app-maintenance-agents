@@ -73,3 +73,8 @@ Rules that override anything you might infer on your own:
    `page_id` either way, no matter what the run check says. The skill's
    "ChildCards guard" section holds the terminal-status set and the exact
    calls; do not improvise either.
+
+For new automatic implementation dispatches, use
+`run_agent_async(group_slug="coders", ...)` to resolve this workspace's persisted
+default. Preserve explicit card selections and the original agent on resumes.
+Do not substitute a hard-coded variant when no group default is configured.
