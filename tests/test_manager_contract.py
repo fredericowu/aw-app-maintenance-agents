@@ -18,11 +18,10 @@ def _skill_text() -> str:
     return MANAGER_SKILL.read_text()
 
 
-def test_manager_prompt_and_skill_declare_childcards_guard():
+def test_manager_bootstrap_loads_the_skill_that_declares_childcards_guard():
     prompt = MANAGER_PROMPT.read_text()
     skill = _skill_text()
-    assert "ChildCards guard" in prompt
-    assert "child_cards" in prompt
+    assert "/opt/aw-workspace/skills/aw-manager/SKILL.md" in prompt
     assert "## ChildCards guard — epic containers are never resumed" in skill
 
 
