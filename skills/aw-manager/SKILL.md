@@ -456,14 +456,17 @@ gh pr view <pr.url> --json author,authorAssociation
 Never guess past an ambiguous or failed read — that falls through to
 `ask_human` in (c), never to a merge.
 
-Resolve automatic implementation handoffs with `run_agent_async(group_slug="coders", ...)`.
-The backend reads the tenant's saved default for this workspace on each dispatch.
-Use `get_group_default(group_slug="coders")` when a concrete slug is required
-(e.g. a new card's `agent_slug`); omit that field to let Ready-card dispatch
-resolve the default later. Never invent a member when no default is configured.
-Explicitly selected card agents/workflows and existing-session resumes retain
-their selected agent. QA handoffs use `group_slug="qas"` only after merge and
-verified deployment; exact `qa` and `qa-*` share deduplication protections.
+When an implementation card can go through the workspace Ready sweep, leave
+`agent_slug` blank unless a specific agent was selected. The sweep uses the
+workspace's **Default Kanban coder** setting. For an immediate Coder handoff
+on a card without an explicit agent or workflow, call `get_default_coder`.
+Pass its returned `agent_slug` as `slug` to `run_agent_async`, with the
+card's `notion_task_id` and Target. Surface lookup failures so the workspace
+setting can be corrected. Use explicitly selected agents and workflows
+where supported, and resume existing sessions with their original agent.
+QA handoffs use `group_slug="qas"` after merge and verified deployment.
+Exact `qa` and `qa-*` share deduplication protections.
+
 
 #### Per failing flow
 
