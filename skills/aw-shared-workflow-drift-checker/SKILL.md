@@ -228,11 +228,13 @@ create_kanban_task(
   description="<shared_file> drifted v<pinned_tag> -> v<LATEST> on <consumer_repo>; caller contract changed, needs a coder.",
   finding_key="shared-workflow-drift:<consumer_repo>:<shared_file_slug>:<LATEST>",
   input_text=<see below>,
-  agent_slug="coder-sonnet",
   target_slug="aw-pipelines-test-coverage",
   tags=["testing", "ci-cd", "shared-workflows"],
 )
 ```
+
+Leave the card's agent blank so the workspace Ready sweep can resolve
+the configured Coder when the card is ready for implementation.
 
 `input_text` must include: the consumer repo and caller file path, old and
 new tag, the full diff of the three contract blocks (permissions /
