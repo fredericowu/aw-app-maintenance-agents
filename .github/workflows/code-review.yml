@@ -108,7 +108,7 @@ concurrency:
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.12.0
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@master
     with:
       ci_check_name: pytest
       # Follow the tenant-managed review workflow, including an intentional
