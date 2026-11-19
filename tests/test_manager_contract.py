@@ -81,3 +81,49 @@ def test_batch1_probe_cap_distinguishes_backoff_from_run_check():
 
     assert "passed back-off and had empty `child_cards`" in b1_section
     assert "resolved by the ChildCards\n   guard" in b1_section
+
+
+# --- card 41d5bf3b: resumed agents continue known work -----------------------
+
+def test_no_template_forbids_continuing_known_work():
+    text = _skill_text() + MANAGER_PROMPT.read_text()
+    for banned in ("Do not redo or extend", "do not redo or extend",
+                   "not to redo or extend"):
+        assert banned not in text, banned
+
+
+def test_resume_contract_has_three_outcomes_and_qa_rules():
+    skill = _skill_text()
+    start = skill.index("### Acting on a qualifying card")
+    block = skill[start:skill.index("`run_id` names the exact qualifying row")]
+    assert "COMPLETE AND VERIFIED" in block
+    assert "KNOWN REMAINING WORK" in block
+    assert "OPEN QUESTION" in block
+    assert "never closed with qa_not_needed" in block
+    assert "never qa_rerun" in block
+    assert "human-only allowlist" in block
+
+
+def test_fresh_fallback_and_destination_one_carry_the_contract():
+    skill = _skill_text()
+    assert "never \"no work has been done\"" in skill
+    assert "never close merged code with qa_not_needed" in skill
+
+
+def test_wakeup_routes_a_card_the_agent_moved_to_need_human():
+    skill = _skill_text()
+    assert "moved the card to `Need Human`" in skill
+    assert "One recovery hop per card per iteration" in skill
+
+
+def test_batch2_twelve_hour_filter_only_for_human_judged_cards():
+    skill = _skill_text()
+    assert "applies **only to cards\nalready judged human-only**" in skill
+    assert "_reping_human_judged" in skill
+
+
+def test_signal_a_uses_flow_needs_human_filter_and_ledger_v2_documented():
+    skill = _skill_text()
+    assert "list_runs(limit=300, flow_needs_human=true)" in skill
+    assert "### Ledger write (ring schema v2)" in skill
+    assert "beyond_window" in skill
