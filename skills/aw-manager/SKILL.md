@@ -602,7 +602,7 @@ the abstract shape; see `agents-platform-multitenant` `seed.py:176`):
 
 ```json
 ext["kanban-sweeper"] = {
-  "schema_version": 1,
+  "schema_version": 2,
   "outcome_legend": {
     "moved_done": "card moved to Done",
     "archived_not_needed": "card archived as moot, not completeness",
@@ -619,17 +619,22 @@ ext["kanban-sweeper"] = {
   "iterations": [
     {
       "seq": 9,
-      "iteration_id": "<Plan iteration id from the prompt>",
+      "iteration_id": "<resolved iteration id, see 'Resolve the iteration identity'>",
       "run_id": "<this run's own AW_RUN_ID>",
+      "beyond_window": 14,
       "finished_at": "2026-11-10T23:40:00+00:00",
       "decision": "pushed",
       "counts": {"moved_done": 2, "routed": 3},
       "items": [
-        {"id": "<notion page_id>", "title": "<=60 chars", "outcome": "moved_done"},
+        {"id": "<notion page_id>", "title": "<=60 chars", "outcome": "moved_done",
+         "action": "moved_done", "why": "QA verdict pass, deploy verified",
+         "disposition": "done"},
         {"id": "<notion page_id>", "title": "<=60 chars", "outcome": "routed",
-         "to": "architect", "note": "optional, short"},
-        {"id": "<notion page_id>", "title": "<=60 chars", "outcome": "routed",
-         "to": "human", "note": "qa-dedup-409, QA approved, awaiting sign-off"}
+         "to": "architect", "action": "routed", "why": "design question",
+         "disposition": "pending"},
+        {"id": "<notion page_id>", "title": "<=60 chars", "outcome": "skipped_quota",
+         "action": "skipped", "why": "5-card quota full; oldest-first next pass",
+         "disposition": "pending"}
       ]
     }
   ],
@@ -648,18 +653,41 @@ parsing prose. `iterations` is newest-first. `PlanIteration.notes` stays the
 free-text narrative, unchanged — this ring is the queryable counterpart; do
 not dump this JSON into `notes`, and do not drop the narrative either.
 
-**WRITE, once, immediately before `finish_plan_iteration`:**
+**Resolve the iteration identity (before the READ).** A workflow-driven
+invocation carries only `selector: stale-sweep`, so there is no `seq` or
+`iteration_id` in your prompt. Resolve it in this order and use the first hit:
+(1) the prompt's `Plan iteration id:` line and `# Plan iteration <seq>`
+heading when present; (2) otherwise `get_run(<your own run id>)` → follow
+its parent workflow run; when that parent has `initiator_kind=plan_cadence`,
+`initiator_id` IS the iteration id (`seq` is then unknown: omit it, the
+ledger matches on `iteration_id` or `run_id`). If neither yields an id, you
+are not in an iteration: skip this whole section.
 
-Build this iteration's entry from the Plan-iteration-prompt fields
-(`seq`, `iteration_id`) plus your own run id and what you actually did this
-pass, prepend it to the `iterations` you read, keep the `carry` map current
-(drop entries past their `expires`), then:
+**WRITE, once, immediately before `finish_plan_iteration`** (the pass
+write). Build this iteration's entry with `schema_version: 2`: the resolved
+`iteration_id`, your own `run_id`, `beyond_window = scanned − returned`, and
+one `items[]` row for **every** card the gate returned (picked, skipped,
+deferred), each with `id`, `title`, `outcome`, `action`, `why` and
+`disposition` (`pending` until a terminal value is known). Prepend the entry
+to the `iterations` you read, keep the `carry` map current (drop entries
+past their `expires`), then:
 
 ```
 update_plan_memory(slug="kanban-sweep", writer_key="kanban-sweeper",
                     value=<the whole subtree above, with your new entry prepended>,
                     summary="<1-3 line rolling gist of the last pass>")
 ```
+
+**Wake-up writes (per card) are read-modify-write with a re-read.** A
+callback wake-up updates only its own card's item, and callbacks can overlap
+when the session lease fails open. Because `value` replaces the whole
+subtree, a stale snapshot would restore another card's finished item to
+`pending`. So: `get_plan_memory("kanban-sweep")` immediately before the
+write, change ONLY your card's item inside the matching iteration entry,
+write, then `get_plan_memory` again and confirm your card's item carries the
+new disposition AND every other item is unchanged from the re-read. If not,
+repeat once from a fresh read. Never reuse the snapshot from the start of
+the run.
 
 `value` REPLACES your whole subtree — this is why you read it first. Keep
 at most 10 entries in `iterations`, and drop the oldest ones while the
@@ -670,7 +698,7 @@ proceed to `finish_plan_iteration` anyway and say so in `notes` — a lost
 memory write must never cost the iteration close.
 
 **`value` must be the JSON object itself, never a JSON-encoded string.**
-Pass `value={"schema_version": 1, ...}` as a native object — if you build it
+Pass `value={"schema_version": 2, ...}` as a native object — if you build it
 as a string (e.g. `json.dumps(...)`) and pass THAT string as `value`, the
 server stores it verbatim, and `ext["kanban-sweeper"]` becomes a string
 instead of an object: a reader then has to parse it before reaching
@@ -682,7 +710,8 @@ Then close the iteration as normal. This section changes nothing about how
 or when you call `finish_plan_iteration` itself — see the `plan-steward`
 agent's own contract for that; this is only about what you write before it.
 
-**Known, accepted race:** `update_plan_memory` replaces the whole subtree
+**Known, accepted race (pass write only; wake-ups use the re-read above):**
+`update_plan_memory` replaces the whole subtree
 you read, with no version check on your own `writer_key`. Only one Plan
 iteration is normally open on "kanban-sweep" at a time (the cadence claim),
 so this only bites if a prior iteration's session is still alive and writes
@@ -936,20 +965,30 @@ AND the filter was honoured-or-absent and the oldest row is recent.
 list_runs(limit=300, flow_needs_human=true)
 ```
 
-Unfiltered, global, newest-first (`list_runs`' own ordering). Walk it once:
+The filtered scan is a **candidate discovery** tool only. A filter hides
+every newer run whose flag is false, so a row it returns is NOT proof that
+the run is the card's latest. Walk it once, newest-first:
 
-1. Keep the **first row seen per distinct `notion_task_id`** — recency order
-   means that is each card's most-recently-dispatched run; a card's older
-   runs under it are irrelevant here.
-2. From those, keep only rows with `flow_needs_human == true`.
-3. From those, keep only rows whose own `status` is terminal
-   (`success`/`error`) — same reasoning as Batch 1's run check: a run still
-   `running`/`pending` may yet take a terminal flow action on its own before
-   anyone needs to intervene, so don't race it.
-4. For each survivor, `get_kanban_properties(page_id, properties=["Status"])`.
-   Skip if it already reads `"Need Human"` (nothing to fix) or `"Done"` /
-   `"Archived"` (superseded by later legitimate action — flagging it now
-   would be noise, not a catch). Anything else qualifies.
+1. Keep the **first row seen per distinct `notion_task_id`** as that card's
+   candidate escalated run.
+2. From those, keep only rows with `flow_needs_human == true` (client-side
+   check, kept for the degrade case where the filter is ignored) whose own
+   `status` is terminal (`success`/`error`) — a run still `running`/`pending`
+   may yet take a terminal flow action on its own, so don't race it.
+3. **Verify against the card's latest UNFILTERED run before acting.** For
+   each survivor call `list_runs(notion_task_id=page_id, limit=1)` (the same
+   call ① liveness probe the batches use, no `flow_needs_human`, no
+   `category`). Drop the card, as superseded, if that latest run is
+   non-terminal (an active newer run owns the card) or is a different run id
+   than the candidate and started AFTER it (a newer run supersedes the old
+   escalation, flagged or not). Only a card whose latest run IS the
+   candidate escalated run proceeds. Never act on the filtered rows alone:
+   an older escalated run beside a newer unflagged one in progress would
+   otherwise move an actively worked card to Need Human.
+4. For each remaining survivor, `get_kanban_properties(page_id,
+   properties=["Status"])`. Skip if it already reads `"Need Human"` (nothing
+   to fix) or `"Done"` / `"Archived"` (superseded by later legitimate action
+   — flagging it now would be noise, not a catch). Anything else qualifies.
 
 **Known, stated limitation, not a silent cap:** this only sees a card's
 escalation if it falls within the newest 300 runs platform-wide. A card

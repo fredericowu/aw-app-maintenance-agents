@@ -135,3 +135,45 @@ def test_ledger_annotations_are_written_inside_the_iterations_entry():
     skill = _skill_text()
     assert "`iterations[]` — the entry\nwhose `iteration_id`" in skill
     assert '"action": "skipped"' in skill and '"why"' in skill
+
+
+def _section(text: str, start: str, end: str) -> str:
+    a = text.index(start)
+    return text[a : text.index(end, a)]
+
+
+def test_signal_a_verifies_latest_unfiltered_run_before_acting():
+    """A filtered scan hides newer unflagged runs, so a candidate must be
+    re-checked against the card's latest UNFILTERED run (superseded or active
+    newer run => drop) before any Need Human move."""
+    sec = _section(_skill_text(), "### Signal A", "**Back-off — applies to Signal A only")
+    assert "candidate discovery" in sec
+    assert "list_runs(notion_task_id=page_id, limit=1)" in sec
+    assert "superseded" in sec and "non-terminal" in sec
+    # the unfiltered verification must precede the Status read
+    assert sec.index("Verify against the card's latest UNFILTERED run") < sec.index(
+        "get_kanban_properties"
+    )
+    # the old "first row per card is the latest" claim must be gone
+    assert "that is each card's most-recently-dispatched run" not in sec
+
+
+def test_plan_memory_canonical_recipe_is_v2_and_workflow_identity_aware():
+    sec = _section(_skill_text(), "## Plan memory — read first, write last", "## Why last_edited_time")
+    assert '"schema_version": 2' in sec
+    assert '"schema_version": 1' not in sec
+    assert "Resolve the iteration identity" in sec
+    assert "initiator_kind=plan_cadence" in sec and "initiator_id" in sec
+    assert "selector: stale-sweep" in sec
+    # canonical example carries the v2 item fields and beyond_window
+    for field in ('"action"', '"why"', '"disposition"', '"beyond_window"'):
+        assert field in sec
+    # the write recipe must not source identity only from the prompt
+    assert "Plan-iteration-prompt fields" not in sec
+
+
+def test_wakeup_ledger_write_rereads_to_avoid_overwriting_other_cards():
+    sec = _section(_skill_text(), "## Plan memory — read first, write last", "## Why last_edited_time")
+    assert "read-modify-write with a re-read" in sec
+    assert "immediately before the\nwrite" in sec
+    assert "restore another card's finished item" in sec
