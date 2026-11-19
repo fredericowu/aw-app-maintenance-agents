@@ -1591,17 +1591,29 @@ nothing — that would reintroduce the exact unreliable path this replaces.
 
 The per-card memory ring `ext["kanban-sweeper"]` is the Manager's annotation
 layer over the platform's deterministic ledger (AP-MT
-`GET /api/plans/{slug}/iterations/{id}/ledger`). Write it with
-`schema_version: 2`: one item for **every** card the gate returned (picked,
-skipped, deferred) — `{card, action, why, runs: [...], disposition}` with
-`disposition` = `pending` or a terminal value — plus
-`beyond_window = scanned − returned`. Iteration identity comes from the
-parent workflow run (`initiator_kind=plan_cadence`, `initiator_id` = the
-iteration id), NOT from an input heading: the old gate required an input
+`GET /api/plans/{slug}/iterations/{id}/ledger`, shown per iteration in
+PlanDetail). The ledger reads annotations from **`iterations[]` — the entry
+whose `iteration_id` (or `run_id`) matches — and its `items[]`**, so write
+them THERE, in the same entry the schema above already defines, not as a
+top-level key. Set `schema_version: 2` and give **every** card the gate
+returned (picked, skipped, deferred) one item:
+
+```json
+{"id": "<page_id>", "title": "<=60 chars", "outcome": "skipped_quota",
+ "action": "skipped", "why": "5-card quota full; oldest-first next pass",
+ "disposition": "pending"}
+```
+
+`id` + `outcome` + `note` stay valid (v1); `action` and `why` are what the
+PlanDetail report shows (it falls back to `outcome`/`note`). Also record
+`beyond_window = scanned − returned` on the entry. Iteration identity comes
+from the parent workflow run (`initiator_kind=plan_cadence`, `initiator_id` =
+the iteration id), NOT from an input heading: the old gate required an input
 starting `# Plan iteration` and silently never wrote after seq 22. Each
-wake-up updates only its own card's item. A Manager-written row is
-Manager-declared; the platform ledger flags a gate candidate with no action
-and no reason as UNACCOUNTED, so give every skipped card a one-line `why`.
+wake-up updates only its own card's item in that same entry. A Manager-written
+row is Manager-declared; the platform ledger flags a gate candidate with no
+action and no reason as UNACCOUNTED, so give every skipped card a one-line
+`why`.
 
 ### Acting on a qualifying card
 

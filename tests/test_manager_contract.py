@@ -127,3 +127,11 @@ def test_signal_a_uses_flow_needs_human_filter_and_ledger_v2_documented():
     assert "list_runs(limit=300, flow_needs_human=true)" in skill
     assert "### Ledger write (ring schema v2)" in skill
     assert "beyond_window" in skill
+
+
+def test_ledger_annotations_are_written_inside_the_iterations_entry():
+    """The AP-MT ledger reads annotations from iterations[].items[] matched on
+    iteration_id; a top-level ring key would never surface in PlanDetail."""
+    skill = _skill_text()
+    assert "`iterations[]` — the entry\nwhose `iteration_id`" in skill
+    assert '"action": "skipped"' in skill and '"why"' in skill
