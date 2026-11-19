@@ -1830,11 +1830,14 @@ list_runs(notion_task_id=page_id, limit=1)       # call ①, liveness only
 ```
 
 Newest row `running`/`pending` → **skip, never touch this card**, same
-non-negotiable rule and same reported reason as Batch 1. No rows, or a
-terminal newest row → proceed. The **30-min "recent run activity" gate does
-not apply here** — that gate exists to avoid interrupting a just-finished
-In Progress handoff; a Need Human card already passed a 12h staleness
-filter. The probe erroring (AP-MT unreachable) → skip and report, never
+non-negotiable rule and same reported reason as Batch 1. No rows → proceed.
+A terminal newest row → proceed only if the card was **judged human-only**
+(it already passed the 12h staleness filter, so the 30-min "recent run
+activity" gate is waived for it). For an **unjudged** Need Human card the
+age check is explicit and is NOT waived: the newest row's `ended_at` must be
+more than `STALE_RUN_MINUTES` (30) minutes ago, otherwise **skip, reason:
+"recent run activity."** (its agent may still be about to finish the
+hand-off). The probe erroring (AP-MT unreachable) → skip and report, never
 qualify, same as Batch 1. Call ② (the pinned `category="work"` lookup) is
 reached only if this candidate goes on to need a resume target — see
 "Premise-resolved action" — and is skipped otherwise, since the ordinary
