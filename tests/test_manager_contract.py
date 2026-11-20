@@ -262,3 +262,13 @@ def test_manager_skill_documents_aw_run_block_and_reasons():
     for needle in ("`aw_run` block", "aw-run: escalate", "stuck_active", "needs_human_label",
                    "never re-wake the same session", "3h cadence"):
         assert needle in text, needle
+
+
+def test_aw_run_routing_precedes_badge_matrix_and_needs_human_goes_to_human():
+    text = MANAGER_SKILL.read_text()
+    i = text.index("Routing precedence")
+    block = text[i:i + 1500]
+    assert "FIRST" in block and "badge: null" in block
+    line = next(l for l in block.splitlines() if "aw-run: needs_human_label" in l)
+    assert "`ask_human` only" in line and "never hand it to a coder" in block
+    assert "dispatch a" in block.split("aw-run: escalate")[1]

@@ -367,10 +367,18 @@ loop is exhausted or impossible, with `attention_reason` starting `aw-run:`:
 - `aw-run: needs_human_label` — the PR carries `devteam:needs-human`.
 - `aw-run: unresolvable` — the run in the label is gone or its agent was deleted.
 
-For such a PR **never re-wake the same session** (that loop is already
-exhausted or impossible): dispatch a fresh coder with a scoped work order (PR
-url, what is open, expected end-state: merged, or closed with an explanation),
-or `ask_human` when it needs a product call. `aw_run.error` set means the nudge
+**Routing precedence: check `attention_reason` for the `aw-run:` prefix FIRST
+and route by the verdict below; apply the badge / `stalled` matrix ONLY to
+ordinary attention entries.** These entries carry `badge: null`, so the badge
+matrix would drop them into its ambiguous `ask_human` branch.
+
+- `aw-run: needs_human_label` → **`ask_human` only.** A human already took this
+  PR out of the automated loop (disputed review); never hand it to a coder.
+- `aw-run: escalate`, `aw-run: unresolvable`, `aw-run: stuck_active` → dispatch a
+  fresh coder with a scoped work order (PR url, what is open, expected
+  end-state: merged, or closed with an explanation), or `ask_human` when it
+  needs a product call. **Never re-wake the same session** (that loop is
+  already exhausted or impossible). `aw_run.error` set means the nudge
 could not run and the tagged PRs came through the ordinary attention filter this
 call; say so in the report. When you re-read the gate yourself, use a plain GET
 (no `nudge`): it replays the last persisted verdicts, so woken PRs stay out.
