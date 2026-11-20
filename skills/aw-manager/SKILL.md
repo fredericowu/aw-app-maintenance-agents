@@ -1753,14 +1753,25 @@ Route it as an ordinary Batch 1 resume (it is one touch, the agent holds the
 context and the completeness call stays with it): resume the original session
 with the `invoke_kanban_agent` message, plus this paragraph appended: "Your
 previous `mark_flow_done` returned `notion_task_id: null`, so the card did not
-move. Call `mark_flow_done` again from this turn with the same honest outcome
-and summary. If it again returns `notion_task_id: null` or `ok: false`, do NOT
-claim it closed: `move_kanban_task(page_id, status=\"need_human\")` with a
-comment stating the outcome you reached and that the platform did not apply
-it." The Manager never moves the card to Done itself. Declare the card in the
-ledger as `routed`/`pending`, why "mark_flow_done binding gap". If a second
-pass finds the same signature again, that is a platform defect: say so in the
-report rather than resuming a third time.
+move. Retry `mark_flow_done` with the same outcome and summary only if the
+previous outcome was `success` and you have verified the card's work is
+complete; a `failed` or `partial` outcome is never replayed (it would move
+unfinished work to Done or Need Human inside `mark_flow_done`), so follow the
+comment-only path below. If you skipped the retry or it again returns `notion_task_id: null` or `ok: false`, do NOT
+claim it closed and do NOT move the card to Need Human: a platform that failed
+to apply an outcome is not a human decision. Add a card comment (no status
+change) stating the outcome you reached, the evidence, and that the platform
+did not apply it, then end your turn reporting that failed move." The Manager
+never moves the card to Done or Need Human itself on this signature. Declare
+the card in the ledger as `routed`/`pending`, why "mark_flow_done binding gap",
+and on the wake-up record the failed move: if the card's real state is
+complete and verified, route it to the QA/closing agent named by the routing
+matrix; otherwise route the remaining work to the responsible agent. The
+platform root cause is a separate finding: cite the existing platform finding
+if one is open (do not create duplicates). If a second pass finds the same
+signature again, say so in the report rather than resuming a third time, with
+the ledger state `routed`/`pending` and the finding reference; Need Human stays
+reserved for the human-only allowlist.
 
 ### Acting on a qualifying card
 
@@ -2149,6 +2160,15 @@ On each such wake-up:
    include_comments=true)`) and check whether the latest one postdates the
    "🧹 manager: ..." comment you posted when you dispatched this
    touch.
+   * **A binding-gap resume whose card is still `In Progress`** (classified
+     at dispatch: record "binding-gap" beside the `(page_id, run_id,
+     status_at_touch)` triple when you resume under "Closed-but-still-open",
+     and use that record here, so a run that errored or ended without a
+     comment is still recognised; the agent's comment is corroboration, never
+     the test) → checked FIRST, before the error / no-reply rule below, whatever the run's terminal status (`error` included). NOT a clean touch and never a `resume-ineffective` hit: do not clear
+     `SweepBlock`. Route the remaining work per that section (responsible
+     agent, or the closing/QA agent when complete), cite the platform
+     finding, and update the ledger item `routed`/`pending`.
    * **Terminal `error`, or terminal `success` with no new reply comment**
      → record wall `resume-ineffective:<session8>` (`<session8>` = the
      first 8 characters of the dispatched run's own `session_id`) via the
