@@ -1753,8 +1753,10 @@ Route it as an ordinary Batch 1 resume (it is one touch, the agent holds the
 context and the completeness call stays with it): resume the original session
 with the `invoke_kanban_agent` message, plus this paragraph appended: "Your
 previous `mark_flow_done` returned `notion_task_id: null`, so the card did not
-move. Call `mark_flow_done` again from this turn with the same honest outcome
-and summary. If it again returns `notion_task_id: null` or `ok: false`, do NOT
+move. If your previous outcome was `failed`, skip the retry (it would move
+the card to Need Human inside `mark_flow_done`) and follow the comment-only
+path below. Otherwise call `mark_flow_done` again from this turn with the same
+honest outcome and summary. If you skipped the retry or it again returns `notion_task_id: null` or `ok: false`, do NOT
 claim it closed and do NOT move the card to Need Human: a platform that failed
 to apply an outcome is not a human decision. Add a card comment (no status
 change) stating the outcome you reached, the evidence, and that the platform
@@ -2182,6 +2184,12 @@ On each such wake-up:
      again. Anything else → route to coder/architect/product-owner now.
      **One recovery hop per card per iteration**: a second bounce falls to
      the existing SweepBlock count.
+   * **A binding-gap resume whose card is still `In Progress`** (the card was
+     routed under "Closed-but-still-open", and the run's comment states the
+     platform did not apply the outcome) → NOT a clean touch: do not clear
+     `SweepBlock`. Route the remaining work per that section (responsible
+     agent, or the closing/QA agent when complete), cite the platform
+     finding, and update the ledger item `routed`/`pending`.
    * **Terminal `success` with a new reply comment** → a clean touch;
      clear `SweepBlock` per the Update rule, if it held a value for this
      card already.
