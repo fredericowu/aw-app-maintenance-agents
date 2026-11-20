@@ -1755,12 +1755,20 @@ with the `invoke_kanban_agent` message, plus this paragraph appended: "Your
 previous `mark_flow_done` returned `notion_task_id: null`, so the card did not
 move. Call `mark_flow_done` again from this turn with the same honest outcome
 and summary. If it again returns `notion_task_id: null` or `ok: false`, do NOT
-claim it closed: `move_kanban_task(page_id, status=\"need_human\")` with a
-comment stating the outcome you reached and that the platform did not apply
-it." The Manager never moves the card to Done itself. Declare the card in the
-ledger as `routed`/`pending`, why "mark_flow_done binding gap". If a second
-pass finds the same signature again, that is a platform defect: say so in the
-report rather than resuming a third time.
+claim it closed and do NOT move the card to Need Human: a platform that failed
+to apply an outcome is not a human decision. Add a card comment (no status
+change) stating the outcome you reached, the evidence, and that the platform
+did not apply it, then end your turn reporting that failed move." The Manager
+never moves the card to Done or Need Human itself on this signature. Declare
+the card in the ledger as `routed`/`pending`, why "mark_flow_done binding gap",
+and on the wake-up record the failed move: if the card's real state is
+complete and verified, route it to the QA/closing agent named by the routing
+matrix; otherwise route the remaining work to the responsible agent. The
+platform root cause is a separate finding: cite the existing platform finding
+if one is open (do not create duplicates). If a second pass finds the same
+signature again, say so in the report rather than resuming a third time, with
+the ledger state `routed`/`pending` and the finding reference; Need Human stays
+reserved for the human-only allowlist.
 
 ### Acting on a qualifying card
 

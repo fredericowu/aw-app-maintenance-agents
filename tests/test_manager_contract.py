@@ -227,4 +227,13 @@ def test_mark_flow_done_binding_gap_is_routed_to_a_resume():
     skill = _skill_text()
     assert "### Closed-but-still-open: the `mark_flow_done` binding gap" in skill
     sec = _section(skill, "### Closed-but-still-open", "### Acting on a qualifying card")
-    assert "notion_task_id: null" in sec and "Manager never moves the card to Done" in sec
+    assert "notion_task_id: null" in sec and "never moves the card to Done or Need Human itself" in " ".join(sec.split())
+
+
+def test_binding_gap_retry_failure_never_moves_card_to_need_human():
+    sec = _section(_skill_text(), "### Closed-but-still-open", "### Acting on a qualifying card")
+    assert 'status=\\"need_human\\"' not in sec
+    assert "do NOT move the card to Need Human" in " ".join(sec.split())
+    assert "human-only allowlist" in sec
+    assert "`routed`/`pending`" in sec
+
