@@ -306,7 +306,7 @@ Candidate source: the **GitHub Maintenance gate** (`aw-app-git`, shipped
 v0.24.0), not `list_kanban_cards_need_attention` — this selector's input
 already carries PRs and failing CI flows, not Kanban cards. Dispatched by
 the `github-maintenance` dag Workflow's `manage` node (gate `check` node →
-`manager` agent node, 6h cadence) with:
+`manager` agent node, 3h cadence) with:
 
 ```
 selector: github-maintenance
@@ -351,6 +351,46 @@ language assuming them; the gate's own `flow_key(flow)` helper (`repo` +
 `:` + `workflow`, no slugging) is the only existing identity precedent —
 reuse it below rather than inventing a second one.
 
+**`aw_run` block and `aw-run:` reasons (Kanban 41e5bf3b).** The gate's
+`check` node runs with `nudge=true`: PRs labelled `aw-run:<run id>` (the run that
+opened them) are handled by a deterministic chain-idle wake in AP-MT BEFORE you
+see anything. If the newest end time across the whole run chain is older than
+1h and nothing in it is running, the ORIGINATING session is woken (up to 3
+times per head SHA). Those PRs never reach you while the loop works. The
+response carries an `aw_run` block (`{tagged, verdicts, counts, error,
+dropped}`) as evidence, and a tagged PR appears in `prs` ONLY when the wake
+loop is exhausted or impossible, with `attention_reason` starting `aw-run:`:
+
+- `aw-run: escalate (woken 3x, head unchanged)` — three wakes, no new commits.
+- `aw-run: stuck_active` — a run in the chain has been `running` for over 24h
+  (zombie row), so waking is blocked.
+- `aw-run: needs_human_label` — the PR carries `devteam:needs-human`.
+- `aw-run: unresolvable` — the run in the label is gone or its agent was deleted.
+
+**Routing precedence: check `attention_reason` for the `aw-run:` prefix FIRST
+and route by the verdict below; apply the badge / `stalled` matrix ONLY to
+ordinary attention entries.** These entries carry `badge: null`, so the badge
+matrix would drop them into its ambiguous `ask_human` branch.
+
+- `aw-run: needs_human_label` → **`ask_human` only.** A human already took this
+  PR out of the automated loop (disputed review); never hand it to a coder.
+- `aw-run: escalate`, `aw-run: unresolvable`, `aw-run: stuck_active` → dispatch a
+  fresh coder with a scoped work order (PR url, what is open, expected
+  end-state: merged, or closed with an explanation), or `ask_human` when it
+  needs a product call. **Never re-wake the same session** (that loop is
+  already exhausted or impossible). `aw_run.error` set means the nudge
+could not run and the tagged PRs came through the ordinary attention filter this
+call; say so in the report. Those entries carry `aw_run: {fallback: true}`, and
+every `aw-run:` entry (fallback or replayed verdict) carries `aw_run.labels`:
+the PR's live label names, read by the gate with its own authenticated `gh` at
+response time (your `gh` is unauthenticated and cannot see private PRs, so do
+not try it). A `devteam:needs-human` label may hide behind an ordinary badge or
+have been added after the verdict was stored, so **never delegate a `fallback`
+PR or a replayed verdict to a coder on the badge or verdict alone**: if
+`aw_run.labels` contains `devteam:needs-human`, or is `null` (the gate could not
+read them), route it to `ask_human`; otherwise proceed with the routing below. When you re-read the gate yourself, use a plain GET
+(no `nudge`): it replays the last persisted verdicts, so woken PRs stay out.
+
 **Hard constraint shaping every action below: the Manager's `gh` is
 UNAUTHENTICATED.** `maintenance-agents-config` deliberately carries no
 `github` permission — that flag is an admin push PAT, and granting it to a
@@ -367,7 +407,7 @@ reads.
 **Touch budget**: shares the same fixed-5-per-invocation budget as
 `stale-sweep` (see "Touch budget" below) — PR items first, then
 failing-flow items, in the gate's own order. Overflow past 5 is reported,
-not processed; it stays eligible on the next 6h tick, same "defer, don't
+not processed; it stays eligible on the next 3h tick, same "defer, don't
 drop" rule Mode B uses for its own overflow.
 
 #### Per attention PR
@@ -565,7 +605,7 @@ move_kanban_task(page_id=page_id, status="need_human",
 ```
 
 Moving it to `need_human` is what stops `ask_human` from repeating every
-6h tick thereafter — the next pass's dedup bump finds `status ==
+3h tick thereafter — the next pass's dedup bump finds `status ==
 "need_human"` and takes the "already escalated" branch above instead.
 This is the same shape as the stale-sweep SweepBlock third rule elsewhere
 in this skill, without reusing `SweepBlock` itself: that property's wall
@@ -2894,7 +2934,7 @@ cadence switches to it (a separate, later card).
 
 A second scheduled feeder is being wired in parallel: the `github-maintenance`
 dag Workflow (gate `check` node → `manager` agent node) fired by a new
-`github-maintenance` operation Plan on a 6h cadence, dispatching
+`github-maintenance` operation Plan on a 3h cadence, dispatching
 `selector: github-maintenance` (Mode A) — see the selector's own
 definition above. Treat it as live only once that wiring card has actually
 merged and deployed; until then this selector still works correctly on a
