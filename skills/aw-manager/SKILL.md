@@ -1924,10 +1924,13 @@ For whichever of those dispatch-succeeded outcomes fired:
 
 ```
 add_kanban_comment(page_id, text="🧹 manager: <what was done and why>")
+# skip ONLY when the invoke_kanban_agent result says call_me_back: true;
+# call it for false, an absent key, and every run_agent_async dispatch
 register_callback(run_id=<the run_id from whichever call above fired>)
 ```
 
-Comment first, register second, never stamp `LastSweptAt` here directly.
+Comment first, register second (unless the resume result says `call_me_back:
+true`, see below), never stamp `LastSweptAt` here directly.
 
 **An `invoke_kanban_agent` resume arms its own callback.** On a runners
 version that has the fix (card 41e5bf3b), the resume's result carries
