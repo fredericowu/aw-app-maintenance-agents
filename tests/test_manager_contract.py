@@ -279,3 +279,9 @@ def test_fallback_tagged_pr_is_never_delegated_on_badge_alone():
     i = text.index("aw_run: {fallback: true}")
     block = text[i:i + 500]
     assert "never delegate" in block and "devteam:needs-human" in block and "`ask_human`" in block
+
+
+def test_replayed_verdicts_also_get_a_live_label_check_before_delegation():
+    text = MANAGER_SKILL.read_text()
+    block = text[text.index("replayed `aw-run:` verdict"):][:600]
+    assert "ANY `aw-run:` entry" in block and "devteam:needs-human" in block and "`ask_human`" in block

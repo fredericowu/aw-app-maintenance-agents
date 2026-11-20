@@ -383,8 +383,11 @@ could not run and the tagged PRs came through the ordinary attention filter this
 call; say so in the report. Those entries carry `aw_run: {fallback: true}` and
 no label data, so a `devteam:needs-human` label may be hiding behind an
 ordinary badge: **never delegate a `fallback` PR to a coder on the badge
-alone.** Check its live labels first; if `devteam:needs-human` is present, or
-the check fails (your `gh` is unauthenticated), route it to `ask_human`. When you re-read the gate yourself, use a plain GET
+alone.** The same applies to a replayed `aw-run:` verdict (a plain GET returns
+the stored verdict, and a human may have labelled the PR since): before
+dispatching a coder for ANY `aw-run:` entry, check its live labels first; if
+`devteam:needs-human` is present, or the check fails (your `gh` is
+unauthenticated), route it to `ask_human`. When you re-read the gate yourself, use a plain GET
 (no `nudge`): it replays the last persisted verdicts, so woken PRs stay out.
 
 **Hard constraint shaping every action below: the Manager's `gh` is
