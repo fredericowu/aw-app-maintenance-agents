@@ -36,6 +36,26 @@ sections for their exact conditions and calls:
 - Apply the **ChildCards guard** before resuming a parent's session:
   non-empty `child_cards` means route through the children, never dispatch
   against the parent itself. Use that section's terminal-status set.
+- **Resolve the Plan iteration FIRST, with a tool call, never from the prompt
+  text.** Your first board call comes only after `get_run(<your own run id>)`
+  has been read: when its parent workflow run has `initiator_kind=plan_cadence`
+  you ARE inside an iteration (`initiator_id` is the iteration id) even though
+  the input is just `selector: stale-sweep`. "The input has no `# Plan
+  iteration` heading" is NOT evidence that you are outside one; concluding
+  "not a plan iteration" without that `get_run` is the bug that left a whole
+  sweep's ledger UNACCOUNTED (see "Plan memory"). Load these tools up front
+  with the rest of the board tools: `get_run`, `get_plan_memory`,
+  `annotate_plan_iteration_card`.
+- **Declare every gate candidate**, not only the ones you touch: one
+  `annotate_plan_iteration_card` call per card the gate returned, at the
+  moment you decide it (touched, skipped, backed off, deferred, already
+  human-routed). See "Per-card declaration" under "Plan memory".
+- **Skips and already-human-routed re-stamps do not spend the 5-touch budget**
+  (see "Touch budget"); a card that does not fit is recorded as deferred.
+- **A flow escalation flag is a lead, not a verdict.** Before moving any card
+  to Need Human from the Priority check, read the flagged run's final output
+  and the card's latest comments and confirm a human decision is actually
+  pending and on the human-only allowlist (see "Priority check", step 5).
 
 
 You close the gap between "a run finished" (or "a card needs attention")
@@ -580,7 +600,9 @@ plan at all and never produces that heading. If your input doesn't start
 that way, **and your run's parent workflow run is not a `plan_cadence`
 iteration either** (the workflow node input is just `selector: stale-sweep`,
 so the iteration id comes from the parent run's `initiator_id`, see "Ledger
-write"), **skip this whole section** — do not call `get_plan_memory` or
+write"), **skip this whole section** — but only after you have actually called
+`get_run(<your own run id>)` and read its parent's `initiator_kind` (never skip
+on the prompt text alone) — do not call `get_plan_memory` or
 `update_plan_memory`, there is no iteration for them to attach to and a
 write from this path would silently skew the ring for every reader.
 
@@ -662,6 +684,37 @@ its parent workflow run; when that parent has `initiator_kind=plan_cadence`,
 `initiator_id` IS the iteration id (`seq` is then unknown: omit it, the
 ledger matches on `iteration_id` or `run_id`). If neither yields an id, you
 are not in an iteration: skip this whole section.
+
+**Per-card declaration (every pass, every gate candidate).** The platform
+ledger marks a gate candidate with no Manager action and no reason as
+UNACCOUNTED, and a card whose declared disposition disagrees with its live
+Status as MISMATCH. So the pass is not complete until each card
+`list_kanban_cards_need_attention` returned has exactly one declaration, made
+when you decide it (do not batch them to the end of a long pass):
+
+```
+annotate_plan_iteration_card(slug="kanban-sweep", iteration_id=<resolved id>,
+    card=<page_id>, action=<resumed|routed|moved_need_human|skipped|backed_off|
+    skipped_active_run|deferred|human_routed_restamp|...>, why="<one line>",
+    disposition=<pending|terminal|skipped>)
+```
+
+* A skip (back-off, active run, ChildCards skip, comment-only) is declared
+  `action="skipped"`/`"backed_off"`, `disposition="skipped"`, with its reason.
+* A card the touch budget had no room for is declared `action="deferred"`,
+  `why="touch budget 5/5 spent; next pass"`, `disposition="pending"`. A
+  deferred card that is simply absent from the ledger is the failure this
+  rule prevents.
+* A card you resumed or routed is declared `disposition="pending"`; the
+  wake-up later writes the terminal value.
+* `action`/`why` must describe what was done to the card on the board. If the
+  card's Status then contradicts the declared disposition (e.g. declared
+  `terminal` while still In Progress) the ledger shows MISMATCH: declare
+  `pending` until the Status actually reflects it.
+* If `annotate_plan_iteration_card` is not in your tool list, run
+  `ToolSearch select:` for it once; if it still does not exist, say so as the
+  first line of your report (the platform tool is missing, not "no
+  iteration") and fall back to the whole-subtree pass write below.
 
 **WRITE, once, immediately before `finish_plan_iteration`** (the pass
 write). Build this iteration's entry with `schema_version: 2`: the resolved
@@ -968,6 +1021,15 @@ AND the filter was honoured-or-absent and the oldest row is recent.
 list_runs(limit=300, flow_needs_human=true)
 ```
 
+**Do not read the 300-row response into context.** It is routinely close to a
+megabyte. Call it, and when the result is saved to a file, reduce it with `jq`
+to one row per distinct `notion_task_id` (`id`, `status`, `ended_at`,
+`notion_task_id`, `source_slug`, `flow_needs_human`) before reading anything.
+Intersect those with the candidate list from `list_kanban_cards_need_attention`
+(only the cards on the board's candidate list matter) rather than walking
+every row. State the row count; a count of 300 (saturated) is reported as
+such, and the intersection with the candidate list is what is acted on.
+
 The filtered scan is a **candidate discovery** tool only. A filter hides
 every newer run whose flag is false, so a row it returns is NOT proof that
 the run is the card's latest. Walk it once, newest-first:
@@ -992,6 +1054,26 @@ the run is the card's latest. Walk it once, newest-first:
    properties=["Status"])`. Skip if it already reads `"Need Human"` (nothing
    to fix) or `"Done"` / `"Archived"` (superseded by later legitimate action
    — flagging it now would be noise, not a catch). Anything else qualifies.
+5. **Verify the escalation reason before moving the card.**
+   `flow_needs_human=true` records that a flow exhausted its reprompts, NOT
+   that a human decision is pending: a run that finished its work and simply
+   never called a terminal action carries the same flag (sweep #66 moved the
+   very card that shipped this change to Need Human on exactly that).
+   For each survivor, read the evidence first: `get_run(<candidate run id>)`
+   → the tail of `output.text`, plus the card's latest comments
+   (`get_kanban_card(page_id, include_comments=true)`). Move to Need Human
+   only when that evidence shows a pending human decision on the
+   **human-only allowlist** (see the Routing matrix, destination 4: an
+   irreversible action, spend, credentials/external access, speaking for
+   Frederico, an explicit "waiting on Frederico", QA-approved-awaiting-manual
+   sign-off, or a prior architect/PO escalation that concluded a human is
+   needed). Then drop the card from the Priority check and treat it as an
+   ordinary candidate for Batch 1/2 (an agent that finished and never closed
+   the card is exactly what Batch 1's resume is for), and write a one-line
+   `why` ("flag set, no human decision pending: run finished, no terminal
+   action") on its ledger row. Never move a card to Need Human from the flag
+   alone, and a run output that is empty or unreadable is not evidence
+   either: treat it as ordinary Batch 1/2 and say so.
 
 **Known, stated limitation, not a silent cap:** this only sees a card's
 escalation if it falls within the newest 300 runs platform-wide. A card
@@ -1656,6 +1738,29 @@ wake-up updates only its own card's item in that same entry. A Manager-written
 row is Manager-declared; the platform ledger flags a gate candidate with no
 action and no reason as UNACCOUNTED, so give every skipped card a one-line
 `why`.
+
+### Closed-but-still-open: the `mark_flow_done` binding gap
+
+Signature: the card's latest run `output.text` says it closed the card (or
+called `mark_flow_done`) and/or quotes `"notion_task_id": null` from
+`mark_flow_done`, yet the card is still In Progress. `mark_flow_done` only
+moves the card of the run row that the caller resolved to; when a warm or
+resumed session resolves to a run without the card binding, the call returns
+`ok: true, notion_task_id: null` and moves nothing. The agent reasonably
+believes it closed the card; the board disagrees.
+
+Route it as an ordinary Batch 1 resume (it is one touch, the agent holds the
+context and the completeness call stays with it): resume the original session
+with the `invoke_kanban_agent` message, plus this paragraph appended: "Your
+previous `mark_flow_done` returned `notion_task_id: null`, so the card did not
+move. Call `mark_flow_done` again from this turn with the same honest outcome
+and summary. If it again returns `notion_task_id: null` or `ok: false`, do NOT
+claim it closed: `move_kanban_task(page_id, status=\"need_human\")` with a
+comment stating the outcome you reached and that the platform did not apply
+it." The Manager never moves the card to Done itself. Declare the card in the
+ledger as `routed`/`pending`, why "mark_flow_done binding gap". If a second
+pass finds the same signature again, that is a platform defect: say so in the
+report rather than resuming a third time.
 
 ### Acting on a qualifying card
 
@@ -2724,6 +2829,33 @@ Escalation picks (the SweepBlock third rule above, or `github-maintenance`'s
 own loop guard) count toward this same budget like everything else — they
 do not add to it either. A list longer than what's left of the budget has
 its overflow reported, not processed, per "Input contract" above.
+
+**What spends a touch: only an action that changes a card or starts work.**
+A resume (`invoke_kanban_agent`), a fresh dispatch (`run_agent_async`), a
+`move_kanban_task`, an `ask_human`, or an archive. Nothing else does.
+
+**What does NOT spend a touch** (a pass that burns 5/5 on these starves cards
+that need real work; sweep #66 spent three of five on them and deferred three
+cards that needed a resume):
+
+* a **skip**: `LastSweptAt` back-off, a non-terminal run, the ChildCards
+  skip-comment, a "blocked, can't help" comment-only note, `skipped_quota`;
+* a card **already judged human-only** (`sweep_block` carries `routed-human`
+  or `escalated`) with no new comment or status change since: re-stamping
+  `LastSweptAt` and, when due, the deterministic 12h re-ping reminder is
+  bookkeeping, not a touch;
+* a Need Human card whose existing human-routed state is simply confirmed.
+
+These cards are still walked, still get a one-line `why`, and are still
+declared in the ledger (see "Per-card declaration"); they just never count
+toward the 5. To keep this from becoming unbounded work, at most **10**
+non-touch cards are processed per pass; anything beyond that is declared
+`deferred`.
+
+**Deferred is recorded, never silent.** Every candidate the budget (or the
+10-card non-touch cap) left unprocessed is declared with
+`annotate_plan_iteration_card(action="deferred", why="touch budget 5/5
+spent", disposition="pending")` and listed in the report with its page id.
 
 ---
 
