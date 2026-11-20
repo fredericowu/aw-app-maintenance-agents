@@ -678,16 +678,19 @@ update_plan_memory(slug="kanban-sweep", writer_key="kanban-sweeper",
                     summary="<1-3 line rolling gist of the last pass>")
 ```
 
-**Wake-up writes (per card) are read-modify-write with a re-read.** A
-callback wake-up updates only its own card's item, and callbacks can overlap
-when the session lease fails open. Because `value` replaces the whole
-subtree, a stale snapshot would restore another card's finished item to
-`pending`. So: `get_plan_memory("kanban-sweep")` immediately before the
-write, change ONLY your card's item inside the matching iteration entry,
-write, then `get_plan_memory` again and confirm your card's item carries the
-new disposition AND every other item is unchanged from the re-read. If not,
-repeat once from a fresh read. Never reuse the snapshot from the start of
-the run.
+**Wake-up writes (per card) use the server-side per-card tool, never
+`update_plan_memory`.** A callback wake-up updates only its own card, and
+callbacks can overlap. Call
+`annotate_plan_iteration_card(slug="kanban-sweep", iteration_id=<resolved
+iteration id>, card=<page_id>, action=..., why=..., disposition=...)`. The
+server does the read-modify-write under a lock on that ONE card's item inside
+that ONE iteration entry, so another wake-up's card is never overwritten and a
+later sweep cannot rewrite an earlier iteration's outcome. Pass
+`expected_rev` (the item's `rev` from `get_plan_memory`, 0 for a new item)
+when you are updating an annotation you read; a 409 means someone wrote it
+since: re-read and decide again, do not retry blindly. Confirm with
+`plan_iteration_ledger` that your card's row shows the new Manager action.
+Never write a whole-subtree `value` from a wake-up.
 
 `value` REPLACES your whole subtree — this is why you read it first. Keep
 at most 10 entries in `iterations`, and drop the oldest ones while the
@@ -710,7 +713,7 @@ Then close the iteration as normal. This section changes nothing about how
 or when you call `finish_plan_iteration` itself — see the `plan-steward`
 agent's own contract for that; this is only about what you write before it.
 
-**Known, accepted race (pass write only; wake-ups use the re-read above):**
+**Known, accepted race (pass write only; wake-ups use `annotate_plan_iteration_card` above):**
 `update_plan_memory` replaces the whole subtree
 you read, with no version check on your own `writer_key`. Only one Plan
 iteration is normally open on "kanban-sweep" at a time (the cadence claim),

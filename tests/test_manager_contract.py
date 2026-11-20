@@ -172,11 +172,13 @@ def test_plan_memory_canonical_recipe_is_v2_and_workflow_identity_aware():
     assert "Plan-iteration-prompt fields" not in sec
 
 
-def test_wakeup_ledger_write_rereads_to_avoid_overwriting_other_cards():
+def test_wakeup_annotations_use_the_per_card_server_tool():
+    """Concurrent wake-ups must not overwrite each other: the wake-up path
+    names the server-side per-card tool and forbids a whole-subtree write."""
     sec = _section(_skill_text(), "## Plan memory — read first, write last", "## Why last_edited_time")
-    assert "read-modify-write with a re-read" in sec
-    assert "immediately before the\nwrite" in sec
-    assert "restore another card's finished item" in sec
+    assert 'annotate_plan_iteration_card(slug="kanban-sweep"' in sec
+    assert "Never write a whole-subtree `value` from a wake-up." in sec
+    assert "read-modify-write with a re-read" not in sec
 
 
 def test_batch2_liveness_step_keeps_age_check_for_unjudged_need_human():
