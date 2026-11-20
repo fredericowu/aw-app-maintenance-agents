@@ -241,7 +241,7 @@ def test_binding_gap_retry_failure_never_moves_card_to_need_human():
 def test_binding_gap_skips_failed_retry_and_is_not_a_clean_touch():
     skill = _skill_text()
     sec = " ".join(_section(skill, "### Closed-but-still-open", "### Acting on a qualifying card").split())
-    assert "previous outcome was `failed`, skip the retry" in sec
+    assert "only if the previous outcome was `success`" in sec and "`failed` or `partial` outcome is never replayed" in sec
     flat = " ".join(skill.split())
     assert "A binding-gap resume whose card is still `In Progress`" in flat
     assert flat.index("A binding-gap resume whose card is still") < flat.index("Terminal `success` with a new reply comment")

@@ -1753,10 +1753,11 @@ Route it as an ordinary Batch 1 resume (it is one touch, the agent holds the
 context and the completeness call stays with it): resume the original session
 with the `invoke_kanban_agent` message, plus this paragraph appended: "Your
 previous `mark_flow_done` returned `notion_task_id: null`, so the card did not
-move. If your previous outcome was `failed`, skip the retry (it would move
-the card to Need Human inside `mark_flow_done`) and follow the comment-only
-path below. Otherwise call `mark_flow_done` again from this turn with the same
-honest outcome and summary. If you skipped the retry or it again returns `notion_task_id: null` or `ok: false`, do NOT
+move. Retry `mark_flow_done` with the same outcome and summary only if the
+previous outcome was `success` and you have verified the card's work is
+complete; a `failed` or `partial` outcome is never replayed (it would move
+unfinished work to Done or Need Human inside `mark_flow_done`), so follow the
+comment-only path below. If you skipped the retry or it again returns `notion_task_id: null` or `ok: false`, do NOT
 claim it closed and do NOT move the card to Need Human: a platform that failed
 to apply an outcome is not a human decision. Add a card comment (no status
 change) stating the outcome you reached, the evidence, and that the platform
