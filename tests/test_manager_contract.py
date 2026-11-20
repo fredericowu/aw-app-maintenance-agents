@@ -260,7 +260,7 @@ def test_binding_gap_classification_is_recorded_at_dispatch_not_read_from_commen
 def test_manager_skill_documents_aw_run_block_and_reasons():
     text = MANAGER_SKILL.read_text()
     for needle in ("`aw_run` block", "aw-run: escalate", "stuck_active", "needs_human_label",
-                   "never re-wake the same session", "3h cadence"):
+                   "Never re-wake the same session", "3h cadence"):
         assert needle in text, needle
 
 
