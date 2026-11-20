@@ -199,7 +199,9 @@ Destinations 1-3 start a run: tell the agent to leave its conclusion as a card c
 
 ## Candidate list
 
-First call of the pass (before the Priority check): `list_kanban_cards_need_attention(limit=10)`: merged In Progress + Need Human list, server-sorted Priority -> `created_time` desc -> `LastSweptAt` asc. **Walk top-down, do not re-sort.** Each card carries `last_swept_at`, `last_edited_time`, `sweep_block`, `qa_status`, `child_cards`; use them instead of property fetches. No staleness filter or run-check is applied server-side. `truncated: true` goes in the report (board has more than the 500-card scan cap). `stale-sweep` stays valid alongside `work_loop`-fed Mode B.
+First call of the pass (before the Priority check): `list_kanban_cards_need_attention(limit=25)`: merged In Progress + Need Human list, server-sorted Priority -> `created_time` desc -> `LastSweptAt` asc. **Walk top-down, do not re-sort.** Each card carries `last_swept_at`, `last_edited_time`, `sweep_block`, `qa_status`, `child_cards`; use them instead of property fetches. No staleness filter or run-check is applied server-side. `truncated: true` goes in the report (board has more than the 500-card scan cap). `stale-sweep` stays valid alongside `work_loop`-fed Mode B.
+
+**Window walking (mandatory; a sweep that only ever sees the top of the list never moves the rest).** The ordering is stable (Priority, newest first), so the same top cards recur every pass and are often all back-offs, epics, active runs or human-routed. When the whole window is walked and the touch budget is NOT spent, and the response carries a non-null `next_offset`, call again with `offset=<next_offset>` and keep walking, until the budget is spent, `next_offset` is null, or 4 windows were read. Report windows read, `scanned`, and any cards never reached. Never stop at the first window just because it is full of skips.
 
 ## ChildCards guard (4th exception)
 
@@ -213,7 +215,7 @@ Counts as a pick against the 5; never reaches the run check or matrix.
 
 ## Batch 1: stale In Progress
 
-Filter the candidate list to `status == "In Progress"`, in order. Qualification is run-activity-based: no run tied to the card active in the last `STALE_RUN_MINUTES = 30`. Per candidate: back-off check, then ChildCards guard (resolved there counts as the pick), then the run check. Take the first `5 - priority` resolved; never relax back-off, ChildCards, 30-min or terminal-run rules to fill the quota. **Cap: 25 run-check probes per pass** (report if hit; unreachable while `limit=10`, keep as backstop). Back-off or ChildCards-resolved candidates don't count against it.
+Filter the candidate list to `status == "In Progress"`, in order. Qualification is run-activity-based: no run tied to the card active in the last `STALE_RUN_MINUTES = 30`. Per candidate: back-off check, then ChildCards guard (resolved there counts as the pick), then the run check. Take the first `5 - priority` resolved; never relax back-off, ChildCards, 30-min or terminal-run rules to fill the quota. **Cap: 25 run-check probes per pass** (report if hit; with window walking it is reachable, so spend probes on back-off-cleared cards first). Back-off or ChildCards-resolved candidates don't count against it.
 
 ### Run check (non-negotiable exclusion)
 ```
@@ -348,7 +350,7 @@ Same turn: (1) clear `SweepBlock` and `UnblockProbe` inline (`set_kanban_propert
 
 **Fixed 5 per invocation, any mode** (stale-sweep: Priority + Batch 1 + Batch 2; github-maintenance: PRs + failing flows; Mode B: list in order). Not configurable, not read from anywhere else. Escalations (third rule, loop guard) count; Priority check takes from it.
 - **Spends a touch:** only an action that changes a card or starts work: `invoke_kanban_agent`, `run_agent_async`, `move_kanban_task`, `ask_human`, an archive.
-- **Does NOT spend:** a skip (back-off, non-terminal run, ChildCards skip-comment, "blocked, can't help" note, `skipped_quota`); a card already judged human-only (`routed-human`/`escalated`) with no new comment/status change (re-stamp and the 12h reminder are bookkeeping); a Need Human card whose human-routed state is merely confirmed. These are still walked, given a one-line `why` and declared in the ledger; max **10** non-touch cards per pass, the rest declared `deferred`.
+- **Does NOT spend:** a skip (back-off, non-terminal run, ChildCards skip-comment, "blocked, can't help" note, `skipped_quota`); a card already judged human-only (`routed-human`/`escalated`) with no new comment/status change (re-stamp and the 12h reminder are bookkeeping); a Need Human card whose human-routed state is merely confirmed. These are still walked, given a one-line `why` and declared in the ledger; max **30** non-touch cards per pass across all windows, the rest declared `deferred`.
 - **Deferred is recorded, never silent:** `annotate_plan_iteration_card(action="deferred", why="touch budget 5/5 spent", disposition="pending")` and listed in the report with page id.
 
 ## Feeders
