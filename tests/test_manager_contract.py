@@ -189,3 +189,42 @@ def test_batch2_liveness_step_keeps_age_check_for_unjudged_need_human():
     assert "NOT waived" in sec and "STALE_RUN_MINUTES" in sec
     assert "recent run activity" in sec
     assert "does not apply here" not in sec
+
+
+def test_plan_iteration_is_resolved_by_tool_call_not_prompt_text():
+    """Sweep #66: the Manager concluded 'Not a plan iteration' from the prompt
+    alone and declared nothing, leaving 9/10 gate candidates UNACCOUNTED."""
+    skill = _skill_text()
+    prio = _section(skill, "## Operational priorities", "You close the gap")
+    assert "get_run(<your own run id>)" in prio
+    assert "annotate_plan_iteration_card" in prio
+    gate = _section(skill, "**Gate: only applies when this run is a Plan iteration.**", "**READ, once")
+    assert "only after you have actually called" in gate
+
+
+def test_every_gate_candidate_is_declared_including_deferred():
+    sec = _section(_skill_text(), "## Plan memory — read first, write last", "## Why last_edited_time")
+    assert "**Per-card declaration (every pass, every gate candidate).**" in sec
+    assert 'action="deferred"' in sec or "`action=\"deferred\"`" in sec
+    assert "UNACCOUNTED" in sec and "MISMATCH" in sec
+
+
+def test_skips_and_human_routed_restamps_do_not_spend_touch_budget():
+    sec = _section(_skill_text(), "## Touch budget (Batch size)", "## Feeders")
+    assert "What does NOT spend a touch" in sec
+    assert "`routed-human`" in sec and "skip" in sec
+    assert "Deferred is recorded, never silent." in sec
+
+
+def test_signal_a_verifies_escalation_reason_and_does_not_read_300_rows():
+    sec = _section(_skill_text(), "### Signal A", "**Back-off — applies to Signal A only")
+    assert "Verify the escalation reason before moving the card" in sec
+    assert "human-only allowlist" in sec
+    assert "Do not read the 300-row response into context" in sec
+
+
+def test_mark_flow_done_binding_gap_is_routed_to_a_resume():
+    skill = _skill_text()
+    assert "### Closed-but-still-open: the `mark_flow_done` binding gap" in skill
+    sec = _section(skill, "### Closed-but-still-open", "### Acting on a qualifying card")
+    assert "notion_task_id: null" in sec and "Manager never moves the card to Done" in sec
