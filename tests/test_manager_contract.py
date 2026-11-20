@@ -177,3 +177,13 @@ def test_wakeup_ledger_write_rereads_to_avoid_overwriting_other_cards():
     assert "read-modify-write with a re-read" in sec
     assert "immediately before the\nwrite" in sec
     assert "restore another card's finished item" in sec
+
+
+def test_batch2_liveness_step_keeps_age_check_for_unjudged_need_human():
+    skill = _skill_text()
+    a = skill.index("call ①, liveness only")
+    sec = skill[a : a + 1600]
+    assert "judged human-only" in sec
+    assert "NOT waived" in sec and "STALE_RUN_MINUTES" in sec
+    assert "recent run activity" in sec
+    assert "does not apply here" not in sec
