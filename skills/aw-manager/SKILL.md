@@ -2160,6 +2160,12 @@ On each such wake-up:
    include_comments=true)`) and check whether the latest one postdates the
    "🧹 manager: ..." comment you posted when you dispatched this
    touch.
+   * **A binding-gap resume whose card is still `In Progress`** (the card was
+     routed under "Closed-but-still-open", and the run's comment states the
+     platform did not apply the outcome) → checked FIRST, before the error / no-reply rule below, whatever the run's terminal status (`error` included). NOT a clean touch and never a `resume-ineffective` hit: do not clear
+     `SweepBlock`. Route the remaining work per that section (responsible
+     agent, or the closing/QA agent when complete), cite the platform
+     finding, and update the ledger item `routed`/`pending`.
    * **Terminal `error`, or terminal `success` with no new reply comment**
      → record wall `resume-ineffective:<session8>` (`<session8>` = the
      first 8 characters of the dispatched run's own `session_id`) via the
@@ -2185,12 +2191,6 @@ On each such wake-up:
      again. Anything else → route to coder/architect/product-owner now.
      **One recovery hop per card per iteration**: a second bounce falls to
      the existing SweepBlock count.
-   * **A binding-gap resume whose card is still `In Progress`** (the card was
-     routed under "Closed-but-still-open", and the run's comment states the
-     platform did not apply the outcome) → NOT a clean touch: do not clear
-     `SweepBlock`. Route the remaining work per that section (responsible
-     agent, or the closing/QA agent when complete), cite the platform
-     finding, and update the ledger item `routed`/`pending`.
    * **Terminal `success` with a new reply comment** → a clean touch;
      clear `SweepBlock` per the Update rule, if it held a value for this
      card already.

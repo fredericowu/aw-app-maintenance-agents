@@ -244,5 +244,8 @@ def test_binding_gap_skips_failed_retry_and_is_not_a_clean_touch():
     assert "only if the previous outcome was `success`" in sec and "`failed` or `partial` outcome is never replayed" in sec
     flat = " ".join(skill.split())
     assert "A binding-gap resume whose card is still `In Progress`" in flat
-    assert flat.index("A binding-gap resume whose card is still") < flat.index("Terminal `success` with a new reply comment")
+    bg = flat.index("A binding-gap resume whose card is still")
+    assert bg < flat.index("Terminal `error`, or terminal `success` with no new reply comment")
+    assert bg < flat.index("Terminal `success` with a new reply comment")
+    assert "never a `resume-ineffective` hit" in flat
 
