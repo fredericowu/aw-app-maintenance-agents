@@ -1928,6 +1928,19 @@ register_callback(run_id=<the run_id from whichever call above fired>)
 ```
 
 Comment first, register second, never stamp `LastSweptAt` here directly.
+
+**An `invoke_kanban_agent` resume arms its own callback.** On a runners
+version that has the fix (card 41e5bf3b), the resume's result carries
+`call_me_back: true` and the callback was armed at creation, so a fast
+comment-only resume can no longer finish before it is armed. Then
+`register_callback` is a harmless confirmation (AP-MT dedups it on the
+watched run, so it cannot wake you twice): keep it, or skip it when the
+result says `call_me_back: true`. On an older runners version the result has
+no `call_me_back` key; `register_callback` is then the only thing arming the
+callback, so always call it. Never treat a missing key as "armed". A
+`run_agent_async` dispatch is unaffected: it already passes `call_me_back`
+itself, and the `register_callback` rule above stands.
+
 Keep `(page_id, run_id, "In Progress")` in your own notes — you need the
 mapping back from `run_id` once the wake-up arrives, see "Deferred stamp"
 below. If `register_callback` itself fails after the comment already
@@ -2860,7 +2873,9 @@ Then, in the same turn as the dispatch:
    view` shows it merged 2026-11-13"). Never just "the blocker looks
    resolved." Also name which agent/run is being resumed, and state that the
    card stays in Need Human.
-3. `register_callback(run_id=<the dispatched run_id>)`, keeping
+3. `register_callback(run_id=<the dispatched run_id>)` (redundant when the
+   `invoke_kanban_agent` result already says `call_me_back: true`, required
+   when the key is absent; see "Then, either way"), keeping
    `(page_id, run_id, "Need Human")` in your notes — `LastSweptAt` is
    **deferred** to that wake-up exactly like any other dispatch, never
    stamped inline here. (The two property writes in step 1 are not a stamp;
