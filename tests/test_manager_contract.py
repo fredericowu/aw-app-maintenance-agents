@@ -249,3 +249,9 @@ def test_binding_gap_skips_failed_retry_and_is_not_a_clean_touch():
     assert bg < flat.index("Terminal `success` with a new reply comment")
     assert "never a `resume-ineffective` hit" in flat
 
+
+def test_binding_gap_classification_is_recorded_at_dispatch_not_read_from_comment():
+    flat = " ".join(_skill_text().split())
+    assert 'record "binding-gap" beside the `(page_id, run_id, status_at_touch)` triple' in flat
+    assert "the agent's comment is corroboration, never the test" in flat
+

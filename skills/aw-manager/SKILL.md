@@ -2160,9 +2160,12 @@ On each such wake-up:
    include_comments=true)`) and check whether the latest one postdates the
    "🧹 manager: ..." comment you posted when you dispatched this
    touch.
-   * **A binding-gap resume whose card is still `In Progress`** (the card was
-     routed under "Closed-but-still-open", and the run's comment states the
-     platform did not apply the outcome) → checked FIRST, before the error / no-reply rule below, whatever the run's terminal status (`error` included). NOT a clean touch and never a `resume-ineffective` hit: do not clear
+   * **A binding-gap resume whose card is still `In Progress`** (classified
+     at dispatch: record "binding-gap" beside the `(page_id, run_id,
+     status_at_touch)` triple when you resume under "Closed-but-still-open",
+     and use that record here, so a run that errored or ended without a
+     comment is still recognised; the agent's comment is corroboration, never
+     the test) → checked FIRST, before the error / no-reply rule below, whatever the run's terminal status (`error` included). NOT a clean touch and never a `resume-ineffective` hit: do not clear
      `SweepBlock`. Route the remaining work per that section (responsible
      agent, or the closing/QA agent when complete), cite the platform
      finding, and update the ledger item `routed`/`pending`.
