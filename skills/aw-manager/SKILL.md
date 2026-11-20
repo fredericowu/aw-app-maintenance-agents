@@ -356,7 +356,14 @@ reuse it below rather than inventing a second one.
 opened them) are handled by a deterministic chain-idle wake in AP-MT BEFORE you
 see anything. If the newest end time across the whole run chain is older than
 1h and nothing in it is running, the ORIGINATING session is woken (up to 3
-times per head SHA). Those PRs never reach you while the loop works. The
+times per head SHA). When the gate sends decision `facts` (aw-app-git >= the PR 2
+of this card), AP-MT also DECIDES per PR with a fixed table: wake the coder to merge
+(CI green, clean, review passed), wake it to continue (red/pending CI, conflicts, open
+findings with reviews left), wake it to request one re-review (CI green and clean, head
+unreviewed, review ceiling not exhausted), or `ask_human` itself (a human took the PR
+over, the review ceiling is exhausted with MEDIUM+ findings open, or the per-head wake
+cap is hit). An ask AP-MT sent is bound to the coder's own run, so it is already
+pending: do NOT ask again. Those PRs never reach you while the loop works. The
 response carries an `aw_run` block (`{tagged, verdicts, counts, error,
 dropped}`) as evidence, and a tagged PR appears in `prs` ONLY when the wake
 loop is exhausted or impossible, with `attention_reason` starting `aw-run:`:
@@ -366,6 +373,8 @@ loop is exhausted or impossible, with `attention_reason` starting `aw-run:`:
   (zombie row), so waking is blocked.
 - `aw-run: needs_human_label` — the PR carries `devteam:needs-human`.
 - `aw-run: unresolvable` — the run in the label is gone or its agent was deleted.
+- `aw-run: ask_unroutable` — AP-MT wanted a human decision but the originating run
+  has no session, so an ask would never be answered. Nothing was sent to a human.
 
 **Routing precedence: check `attention_reason` for the `aw-run:` prefix FIRST
 and route by the verdict below; apply the badge / `stalled` matrix ONLY to
@@ -378,7 +387,13 @@ matrix would drop them into its ambiguous `ask_human` branch.
   fresh coder with a scoped work order (PR url, what is open, expected
   end-state: merged, or closed with an explanation), or `ask_human` when it
   needs a product call. **Never re-wake the same session** (that loop is
-  already exhausted or impossible). `aw_run.error` set means the nudge
+  already exhausted or impossible).
+- `aw-run: ask_unroutable` → **`ask_human` yourself**, quoting the PR url and the
+  verdict's `reason` (it names the rule that wanted the human). With the deterministic
+  decision in AP-MT, `escalate` and `needs_human_label` only reach you from an AP-MT
+  that predates it (no `facts` sent); the two routes above stay valid for that case.
+
+`aw_run.error` set means the nudge
 could not run and the tagged PRs came through the ordinary attention filter this
 call; say so in the report. Those entries carry `aw_run: {fallback: true}`, and
 every `aw-run:` entry (fallback or replayed verdict) carries `aw_run.labels`:
@@ -390,6 +405,19 @@ PR or a replayed verdict to a coder on the badge or verdict alone**: if
 `aw_run.labels` contains `devteam:needs-human`, or is `null` (the gate could not
 read them), route it to `ask_human`; otherwise proceed with the routing below. When you re-read the gate yourself, use a plain GET
 (no `nudge`): it replays the last persisted verdicts, so woken PRs stay out.
+
+**Safety net: a human-bound verdict that exists only in `aw_run.verdicts`.** AP-MT's
+ask can fail to go out, and a failed ask must not leave a PR nobody is looking at.
+For every entry in `aw_run.verdicts` whose `verdict` is `ask_failed`, `ask_deferred`
+or `ask_unroutable`, or whose `handed_off` is true, and that is NOT already in `prs`
+(the Manager back-off hid it, or the replay dropped it): check that no question is
+pending for that PR before acting. A pending question means a run of the PR's chain
+is `waiting_human`; `asked` and `woken` verdicts are never part of this net. If none
+is pending, call `ask_human` once for that PR (url, verdict, reason, what the options
+are: merge, continue, or close), and say in the report that it came from the net. Never
+dispatch a coder from this net. `ask_deferred` is the one that clears itself next
+cadence, so for it ask only when the same PR shows `ask_deferred` in two consecutive
+reads.
 
 **Hard constraint shaping every action below: the Manager's `gh` is
 UNAUTHENTICATED.** `maintenance-agents-config` deliberately carries no

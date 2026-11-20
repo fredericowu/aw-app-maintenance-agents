@@ -298,3 +298,24 @@ def test_register_callback_is_skipped_only_on_call_me_back_true():
     nh = skill[skill.index("3. Call `register_callback(run_id=<the dispatched run_id>)`") :][:400]
     assert "unless the" in nh and "`call_me_back: true`" in nh
     assert "`false` or an absent key still needs it" in nh
+
+
+def test_manager_skill_covers_deterministic_wake_and_ask_unroutable():
+    text = " ".join(MANAGER_SKILL.read_text().split())
+    for needle in ("`aw-run: ask_unroutable`", "request one re-review", "do NOT ask again",
+                   "only reach you from an AP-MT that predates it"):
+        assert needle in text, needle
+    block = text[text.index("Routing precedence"):][:2600]
+    line = block[block.index("- `aw-run: ask_unroutable` → "):].split("\n\n")[0]
+    assert "`ask_human` yourself" in line
+
+
+def test_safety_net_asks_for_verdicts_seen_only_in_aw_run_verdicts():
+    text = MANAGER_SKILL.read_text()
+    i = text.index("**Safety net: a human-bound verdict")
+    block = text[i:i + 1800]
+    for needle in ("ask_failed", "ask_deferred", "ask_unroutable", "`handed_off`",
+                   "NOT already in `prs`", "no question is\npending", "`ask_human` once",
+                   "Never\ndispatch a coder from this net", "two consecutive"):
+        assert needle in block, needle
+    assert "`asked` and `woken` verdicts are never part of this net" in block
