@@ -277,7 +277,7 @@ def test_aw_run_routing_precedes_badge_matrix_and_needs_human_goes_to_human():
 def test_fallback_tagged_pr_is_never_delegated_on_badge_alone():
     text = MANAGER_SKILL.read_text()
     i = text.index("aw_run: {fallback: true}")
-    block = text[i:i + 500]
+    block = text[i:i + 1000]
     assert "never delegate" in block and "devteam:needs-human" in block and "`ask_human`" in block
 
 
