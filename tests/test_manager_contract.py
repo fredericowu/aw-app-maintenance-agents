@@ -287,3 +287,14 @@ def test_replayed_verdicts_also_get_a_live_label_check_before_delegation():
     i = text.index("aw_run: {fallback: true}")
     block = text[i:i + 1200]
     assert "replayed verdict" in block and "unauthenticated" in block and "`ask_human`" in block
+
+def test_register_callback_is_skipped_only_on_call_me_back_true():
+    """A resume that armed its own callback must not be re-registered (resets
+    callback_done, double wake); false/absent flags still need registration."""
+    skill = _skill_text()
+    start = skill.index("For whichever of those dispatch-succeeded outcomes fired:")
+    recipe = skill[start : start + 900]
+    assert "ONLY when the invoke_kanban_agent result says call_me_back: true" in recipe
+    nh = skill[skill.index("3. Call `register_callback(run_id=<the dispatched run_id>)`") :][:400]
+    assert "unless the" in nh and "`call_me_back: true`" in nh
+    assert "`false` or an absent key still needs it" in nh

@@ -1924,10 +1924,28 @@ For whichever of those dispatch-succeeded outcomes fired:
 
 ```
 add_kanban_comment(page_id, text="🧹 manager: <what was done and why>")
+# skip ONLY when the invoke_kanban_agent result says call_me_back: true;
+# call it for false, an absent key, and every run_agent_async dispatch
 register_callback(run_id=<the run_id from whichever call above fired>)
 ```
 
-Comment first, register second, never stamp `LastSweptAt` here directly.
+Comment first, register second (unless the resume result says `call_me_back:
+true`, see below), never stamp `LastSweptAt` here directly.
+
+**An `invoke_kanban_agent` resume arms its own callback.** On a runners
+version that has the fix (card 41e5bf3b), the resume's result carries
+`call_me_back: true` and the callback was armed at creation, so a fast
+comment-only resume can no longer finish before it is armed. If the result
+says `call_me_back: true`, skip `register_callback`: re-registering after a
+fast resume already claimed delivery resets its done flag and starts a second
+watcher, which can wake you twice for the same card. If the result says
+`call_me_back: false` or has no `call_me_back` key (an older runners, or
+dispatch-time arming disabled), nothing armed the callback, so call
+`register_callback` after posting the comment. Never treat a missing key or a
+`false` as "armed". A `run_agent_async` dispatch is unaffected: it passes
+`call_me_back=false` itself, so register its callback after posting the
+comment, per the rule above.
+
 Keep `(page_id, run_id, "In Progress")` in your own notes — you need the
 mapping back from `run_id` once the wake-up arrives, see "Deferred stamp"
 below. If `register_callback` itself fails after the comment already
@@ -2860,7 +2878,10 @@ Then, in the same turn as the dispatch:
    view` shows it merged 2026-11-13"). Never just "the blocker looks
    resolved." Also name which agent/run is being resumed, and state that the
    card stays in Need Human.
-3. `register_callback(run_id=<the dispatched run_id>)`, keeping
+3. Call `register_callback(run_id=<the dispatched run_id>)` unless the
+   `invoke_kanban_agent` result says `call_me_back: true` (skip it only on
+   `true`; `false` or an absent key still needs it; see "Then, either way"),
+   keeping
    `(page_id, run_id, "Need Human")` in your notes — `LastSweptAt` is
    **deferred** to that wake-up exactly like any other dispatch, never
    stamped inline here. (The two property writes in step 1 are not a stamp;
