@@ -151,7 +151,7 @@ Candidate discovery only; walk newest-first:
 **Acting** (exception to Rule 1: the call was already made and recorded). Move directly:
 - A: `move_kanban_task(page_id, status="need_human", comment="🧹 manager: Agents Flow escalated this to Need Human (run <id>, agent <slug>) but the card never moved - correcting it now. See the run for the original reason.")`
 - B: `move_kanban_task(page_id, status="need_human", comment="🧹 manager: QAStatus has read need_human since <hint> while Status stayed In Progress - a recorded verdict nobody enacted. Moving the card to match it. Routed per the routing matrix: <named_action>.")` with `named_action` required (a move with no ping is abolished).
-Then stamp `LastSweptAt` and clear `SweepBlock` inline. Picks count toward the 5: Batch 1 quota = `5 - priority`, Batch 2 = `5 - priority - batch1`.
+Then stamp `LastSweptAt` and clear `SweepBlock` inline. Picks count toward 10: Batch 1 quota = `7 - priority` (3 reserved for Batch 2), Batch 2 = `10 - priority - batch1`.
 
 ## Routing matrix
 
@@ -195,7 +195,7 @@ Counts as a pick; never reaches the run check or matrix.
 
 ## Batch 1: stale In Progress
 
-Filter the list to `status == "In Progress"`, in order. Qualification is run-activity-based: no run tied to the card active in the last `STALE_RUN_MINUTES = 30`. Per candidate: back-off, ChildCards guard (resolved counts as the pick), run check. Take the first `5 - priority` resolved; never relax back-off, ChildCards, 30-min or terminal-run rules to fill the quota. **Cap: 25 run-check probes per pass** (report if hit; spend them on back-off-cleared cards first). Back-off or ChildCards-resolved candidates don't count against it.
+Filter the list to `status == "In Progress"`, in order. Qualification is run-activity-based: no run tied to the card active in the last `STALE_RUN_MINUTES = 30`. Per candidate: back-off, ChildCards guard (resolved counts as the pick), run check. Take the first `7 - priority` resolved; never relax back-off, ChildCards, 30-min or terminal-run rules to fill the quota. **Cap: 25 run-check probes per pass** (report if hit; spend them on back-off-cleared cards first). Back-off or ChildCards-resolved candidates don't count against it.
 
 ### Run check (non-negotiable exclusion)
 ```
@@ -232,7 +232,7 @@ A resume may arm its own callback (re-registering resets its done flag and doubl
 
 ## Batch 2: Need Human complement
 
-Only if Priority + Batch 1 picked fewer than 5 (`needed = 5 - priority - batch1`). Filter the list to `status == "Need Human"`. Walk until `needed` are **picked**: cleared back-off (incl. an epic resolved by the ChildCards guard) OR an `UnblockProbe` evaluating TRUE (overrides back-off). Skipped-by-liveness/back-off don't count.
+Only if Priority + Batch 1 picked fewer than 10 (`needed = 10 - priority - batch1`). Filter the list to `status == "Need Human"`. Walk until `needed` are **picked**: cleared back-off (incl. an epic resolved by the ChildCards guard) OR an `UnblockProbe` evaluating TRUE (overrides back-off). Skipped-by-liveness/back-off don't count.
 
 **Staleness:** the 12h `last_edited_time` filter applies **only to cards already judged human-only** (`sweep_block` carries `routed-human` or `escalated`; same test as `_reping_human_judged`). An unjudged card qualifies once call ① shows no live run and its newest run ended `> STALE_RUN_MINUTES` ago.
 
