@@ -330,12 +330,14 @@ def test_scenario_needs_human_removal_order_and_conditions():
     sec = sec[sec.index("**`devteam:needs-human`:**"):]
     assert "only the resolver of its blocker may remove it" in sec
     assert "dispatched to resolve this PR's blocker" in sec
-    for cond in ("(1) the label predates", "(2) CI green AND `mergeStateStatus` `CLEAN`", "(3) at least one COMPLETED review of the current head"):
+    for cond in ("(1) the label predates", "(2) CI green AND `mergeStateStatus` `CLEAN`", "(3) at least one review of the current head COMPLETED"):
         assert cond in sec, cond
     assert sec.index("remove the label") < sec.index("post a PR comment") < sec.index("comment `/aw-review`")
     assert "all via its authenticated `gh`" in sec
     assert "If the label is already gone from a partial earlier run" in sec
     assert "a skipped or missing review does not count" in sec
+    # mixed reviews: one clean + one blocking on the same head must NOT clear the hold
+    assert "EVERY review since the last push found nothing blocking" in sec
     assert "Never merge directly" in sec and "never touch `devteam:awaiting-fixes`" in sec
 
 
