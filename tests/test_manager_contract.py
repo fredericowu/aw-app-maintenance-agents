@@ -300,7 +300,7 @@ def test_core_safety_rules_survive_compaction():
         "Never merge a PR", "never remove `devteam:awaiting-fixes`",
         "NEVER call `mark_flow_done`", "qa_not_needed=true",
         "Non-terminal run on the card (running/pending) = untouchable",
-        "**Fixed 5 per invocation, any mode**",
+        "**Fixed 10 per invocation, any mode**",
         "NEVER treat unevaluable as TRUE",
         "Never use the board's literal \"Not Needed\" option",
         "UNAUTHENTICATED",
