@@ -88,6 +88,14 @@ def test_pr_writes_go_through_an_authorized_coder():
     assert flat.index("remove the label") < flat.index("comment the evidence") < flat.index("comment `/aw-review`")
 
 
+def test_budget_split_backoff_before_childcards_and_binding_gap_first():
+    flat = _flat()
+    assert "Batch 1 takes `7 - priority`" in flat and "`10 - priority - batch1`" in flat
+    assert flat.index("back-off, ChildCards guard (an epic") > flat.index("Layer A UnblockProbe")
+    assert "is checked FIRST: never a `resume-ineffective` hit" in flat
+    assert "call `register_callback(run_id)` and keep `(page_id, run_id, status_at_touch)`" in flat
+
+
 def test_coders_must_attach_pr_to_target():
     assert "Coders must run `attach_pr_to_target`" in _flat()
 
