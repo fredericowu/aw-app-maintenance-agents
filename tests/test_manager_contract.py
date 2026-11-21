@@ -113,6 +113,8 @@ def test_needs_human_removal_requires_every_completed_review_clean():
     # Mixed clean + blocking reviews after the last push must NOT qualify.
     flat = _flat()
     assert "EVERY completed review after the last push found nothing blocking" in flat
-    assert "one clean review beside a blocking one does not qualify" in flat
+    assert "one clean review beside a blocking one does not" in flat
+    assert "at least one completed review of the current head exists AND EVERY" in flat
+    assert "zero reviews never qualifies" in flat
     assert "a skipped or missing review does not count" in flat
     assert "a COMPLETED review of the current head found nothing blocking" not in flat
