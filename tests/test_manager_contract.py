@@ -105,6 +105,15 @@ def test_author_association_uses_rest_field():
     assert "`author_association`" in flat and "gh pr view <url> --json author" not in flat
 
 
+def test_known_author_comes_from_the_verdict_not_a_gh_lookup():
+    flat = _flat()
+    assert "the verdict's `author_association` OWNER/MEMBER/COLLABORATOR" in flat
+    assert "`author_association` null or absent" in flat and "= unknown author: `ask_human`" in flat
+    assert "gh api repos/" not in flat
+    assert "(reads are fine)" not in flat
+    assert "no routing decision may depend on it" in flat
+
+
 def test_register_callback_skipped_only_on_call_me_back_true():
     assert "skip only when the result says `call_me_back: true`" in _flat()
 
