@@ -36,7 +36,8 @@ def test_manager_bootstrap_loads_the_skill_that_declares_childcards_guard():
 def test_skill_stays_compact():
     """The skill was compacted from 3148 lines; keep it from regrowing."""
     assert len(_skill_text().splitlines()) < 500
-    assert len(_skill_text().split()) < 6600  # was 7645 words at v0.65.0
+    # PO-approved ceiling for card 41e5bf3b (was 7645 words at a5e6433; 25652 at 8dac4a6)
+    assert len(_skill_text().split()) <= 6548
 
 
 def test_pr_row_is_gone_from_the_known_gap_and_routes_to_pr_write_routing():
