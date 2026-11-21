@@ -64,7 +64,7 @@ Entry shapes: `prs` `{repo, number, url, title, author, badge, updated_at, age_h
 
 **Hard constraint: your `gh` is UNAUTHENTICATED.** You decide and delegate; never `gh pr merge/close/comment` (devteam label writes below are the one exception). Unauthenticated reads (`gh pr view --json author,authorAssociation`) are fine.
 
-**Budget:** shared fixed 5; PRs first, then failing flows, gate order; overflow reported, not dropped.
+**Budget:** shared fixed 10; PRs first, then failing flows, gate order; overflow reported, not dropped.
 
 ### `aw_run` block and `aw-run:` reasons
 The gate runs with `nudge=true`. PRs labelled `aw-run:<run id>` are handled by a deterministic AP-MT chain-idle wake BEFORE you see them (chain idle >1h and nothing running: originating session woken, up to 3x per head SHA). With decision `facts`, AP-MT decides per PR: wake coder to merge (CI green, clean, review passed); wake to continue (red/pending CI, conflicts, open findings with reviews left); wake to request one re-review (green, clean, head unreviewed, ceiling not exhausted); or `ask_human` itself (human took over, ceiling exhausted with MEDIUM+ findings, or per-head wake cap hit). An ask AP-MT sent is bound to the coder's run, so it is already pending: do NOT ask again. A tagged PR reaches `prs` only when the loop is exhausted/impossible. Response carries `aw_run {tagged, verdicts, counts, error, dropped}`.
@@ -128,7 +128,7 @@ Keep `outcome_legend` in sync if you add an outcome. `PlanIteration.notes` stays
 **Per-card declaration (every pass, every gate candidate):** the platform ledger marks a candidate with no action/reason UNACCOUNTED and one whose declared disposition disagrees with live Status MISMATCH. Declare when you decide, not batched:
 `annotate_plan_iteration_card(slug="kanban-sweep", iteration_id=<id>, card=<page_id>, action=<resumed|routed|moved_need_human|skipped|backed_off|skipped_active_run|deferred|human_routed_restamp|...>, why="<one line>", disposition=<pending|terminal|skipped>)`
 - Skip (back-off, active run, ChildCards skip, comment-only): `skipped`/`backed_off`, disposition `skipped`, with reason.
-- Budget had no room: `action="deferred"`, `why="touch budget 5/5 spent; next pass"`, `pending`.
+- Budget had no room: `action="deferred"`, `why="touch budget 10/10 spent; next pass"`, `pending`.
 - Resumed/routed: `pending` (wake-up writes the terminal value). If Status contradicts a `terminal` declaration, ledger shows MISMATCH: declare `pending` until Status reflects it.
 - Tool missing: `ToolSearch select:` once; if still absent, say so as the first report line (platform tool missing, not "no iteration") and use the pass write below.
 
@@ -322,7 +322,7 @@ Additionally, for platform-shaped walls only, file/bump a finding via `create_ka
 | `resume-ineffective` with resumed `source_slug` != card `AgentSlug` | `reliability:invoke-kanban-agent-wrong-session` | `debugger` |
 | `qa-dedup-409` (only if still hit after the run-id-selector card shipped) | `reliability:kanban-sweeper-qa-dedup-wall` | `debugger` |
 `no-work-run`, `no-session`, and `resume-ineffective` with a matching `AgentSlug` get no finding card (the move + ping still fire). Dedup only reliably reopens from Done (Archived is skipped outright), so report what `create_kanban_task` returned (`is_new`, `occurrence_count`) instead of calling it handled.
-Edges: if `ask_human` fails on a scheduled session, comment-only + report, don't touch verdicts. A long-running epic whose resumed session replies "keep In Progress" is a clean touch. Missed wake-ups (~1h ceiling) only delay `resume-ineffective` counting. Escalation picks use the same 5 budget.
+Edges: if `ask_human` fails on a scheduled session, comment-only + report, don't touch verdicts. A long-running epic whose resumed session replies "keep In Progress" is a clean touch. Missed wake-ups (~1h ceiling) only delay `resume-ineffective` counting. Escalation picks use the same 10 budget.
 
 **12h re-ping gate (external reader):** the deterministic Need Human re-ping (`list_kanban_cards_need_attention(reping=True)`, not yours to call) pings only cards whose SweepBlock reads `routed-human|...` or `<wall_key>|escalated|...`. So writing the marker arms the reminder; clearing it disarms (not a way to silence a waiting card); unmarked cards go up to 48h unreminded, then ping flagged `(unrouted >=48h - fail-open)`. A premise-resolved resume deliberately disarms (the resumed agent is told to re-write both markers if still blocked). Malformed SweepBlock/UnblockProbe read as absent on that side too.
 
@@ -348,10 +348,10 @@ Same turn: (1) clear `SweepBlock` and `UnblockProbe` inline (`set_kanban_propert
 
 ## Touch budget
 
-**Fixed 5 per invocation, any mode** (stale-sweep: Priority + Batch 1 + Batch 2; github-maintenance: PRs + failing flows; Mode B: list in order). Not configurable, not read from anywhere else. Escalations (third rule, loop guard) count; Priority check takes from it.
+**Fixed 10 per invocation, any mode** (raised from 5 so Need Human cards stop being deferred) (stale-sweep: Priority + Batch 1 + Batch 2; github-maintenance: PRs + failing flows; Mode B: list in order). Not configurable, not read from anywhere else. Escalations (third rule, loop guard) count; Priority check takes from it.
 - **Spends a touch:** only an action that changes a card or starts work: `invoke_kanban_agent`, `run_agent_async`, `move_kanban_task`, `ask_human`, an archive.
 - **Does NOT spend:** a skip (back-off, non-terminal run, ChildCards skip-comment, "blocked, can't help" note, `skipped_quota`); a card already judged human-only (`routed-human`/`escalated`) with no new comment/status change (re-stamp and the 12h reminder are bookkeeping); a Need Human card whose human-routed state is merely confirmed. These are still walked, given a one-line `why` and declared in the ledger; max **30** non-touch cards per pass across all windows, the rest declared `deferred`.
-- **Deferred is recorded, never silent:** `annotate_plan_iteration_card(action="deferred", why="touch budget 5/5 spent", disposition="pending")` and listed in the report with page id.
+- **Deferred is recorded, never silent:** `annotate_plan_iteration_card(action="deferred", why="touch budget 10/10 spent", disposition="pending")` and listed in the report with page id.
 
 ## Feeders
 
