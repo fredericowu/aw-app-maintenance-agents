@@ -107,3 +107,12 @@ def test_author_association_uses_rest_field():
 
 def test_register_callback_skipped_only_on_call_me_back_true():
     assert "skip only when the result says `call_me_back: true`" in _flat()
+
+
+def test_needs_human_removal_requires_every_completed_review_clean():
+    # Mixed clean + blocking reviews after the last push must NOT qualify.
+    flat = _flat()
+    assert "EVERY completed review after the last push found nothing blocking" in flat
+    assert "one clean review beside a blocking one does not qualify" in flat
+    assert "a skipped or missing review does not count" in flat
+    assert "a COMPLETED review of the current head found nothing blocking" not in flat
