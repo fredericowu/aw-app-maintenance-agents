@@ -36,6 +36,13 @@ def test_manager_bootstrap_loads_the_skill_that_declares_childcards_guard():
 def test_skill_stays_compact():
     """The skill was compacted from 3148 lines; keep it from regrowing."""
     assert len(_skill_text().splitlines()) < 500
+    assert len(_skill_text().split()) < 6600  # was 7645 words at v0.65.0
+
+
+def test_pr_row_is_gone_from_the_known_gap_and_routes_to_pr_write_routing():
+    sec = _section(_skill_text(), "## Input contract", "## Per-card pipeline")
+    assert "documented gap" not in sec
+    assert "PR write routing" in sec and "suggested_action` (advisory)" in sec
 
 
 def test_mode_b_requires_get_kanban_card_before_following_suggested_action():
@@ -300,3 +307,75 @@ def test_core_safety_rules_survive_compaction():
         "Never merge directly",
     ):
         assert needle in flat, needle
+
+
+# --- card 41e5bf3b rework: PR writes via an authorized Coder, Plan source order --
+
+def _pr_routing() -> str:
+    return _flat(_section(_skill_text(), "## PR write routing", "## Plan memory"))
+
+
+def test_scenario_authorized_pr_write_goes_to_a_coder_with_its_own_gh():
+    sec = _pr_routing()
+    assert "suggested_action` is advisory" in sec
+    assert 'run_agent_async(group_slug="coders"' in sec
+    assert "that runner's authenticated `gh` on the target repo" in sec
+    assert "recheck the evidence against the CURRENT head" in sec
+    assert "Label operations and every other PR write need an authenticated `gh`" in sec
+
+
+def test_scenario_needs_human_removal_order_and_conditions():
+    sec = _pr_routing()
+    sec = sec[sec.index("**`devteam:needs-human`:**"):]
+    assert "only the resolver of its blocker may remove it" in sec
+    assert "dispatched to resolve this PR's blocker" in sec
+    for cond in ("(1) the label predates", "(2) CI green AND `mergeStateStatus` `CLEAN`", "(3) every review pass"):
+        assert cond in sec, cond
+    assert sec.index("remove the label") < sec.index("post a PR comment") < sec.index("comment `/aw-review`")
+    assert "all via its authenticated `gh`" in sec
+    assert "Never merge directly" in sec and "never touch `devteam:awaiting-fixes`" in sec
+
+
+def test_scenario_missing_auth_authority_or_stale_evidence_is_skipped_not_claimed():
+    sec = _pr_routing()
+    for reason in ("`no-auth`", "`not-authorized`", "`stale-evidence`"):
+        assert reason in sec, reason
+    assert "make no write" in sec and "never as success" in sec
+    assert "the label stays and the reason is reported" in sec
+    assert "skip, report the reason, claim nothing" in sec
+
+
+def test_scenario_holds_external_authors_and_gate_labels_are_preserved():
+    sec = _pr_routing()
+    row = sec[sec.index("| Human hold"):sec.index("| Gate-owned")]
+    assert "unknown/external author" in row and "`needs_human_label` verdict" in row
+    assert "`ask_human`; no coder" in row
+    assert "never touched" in sec
+    for gate in ("`devteam:awaiting-fixes`", "`devteam:review-capped`", "`devteam/*`", "`aw-run:*`"):
+        assert gate in sec, gate
+
+
+def test_manager_never_writes_with_its_own_gh_and_no_standing_label_exception():
+    text = _flat(_skill_text())
+    assert "your `gh` is UNAUTHENTICATED" in text
+    assert "never `gh pr merge/close/comment` or a label write" in text
+    assert "The Manager may remove" not in text
+    assert "one exception" not in text
+
+
+def test_work_order_skip_reasons_reach_the_report():
+    rep = _flat(_section(_skill_text(), "## Report", "Report what is true"))
+    assert "`no-auth`, `not-authorized`, `stale-evidence`" in rep
+    assert "never a skipped write as done" in rep
+
+
+def test_plan_iteration_source_order_is_get_run_then_prompt_fallback():
+    skill = _skill_text()
+    core = _flat(_section(skill, "## Core rules", "## Ending the turn"))
+    assert core.index("get_run(<your own run id>)") < core.index("`Plan iteration id:` line")
+    assert "only the fallback when `get_run` errors or shows no parent" in core
+    mem = _flat(_section(skill, "## Plan memory", "**READ once**"))
+    assert mem.index("`get_run` parent `initiator_kind=plan_cadence`") < mem.index(
+        "prompt `Plan iteration id:` line as fallback"
+    )
+    assert "prompt `Plan iteration id:` line, else parent run" not in _flat(skill)
