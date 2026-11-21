@@ -82,7 +82,7 @@ Walk `prs` in gate order, don't re-filter. `badge` is `tests-failed`, `ready-to-
 
 **Known author:** operator's own GitHub identity, a `[bot]` login, or `authorAssociation` OWNER/MEMBER/COLLABORATOR. CONTRIBUTOR/FIRST_TIME_CONTRIBUTOR/NONE or a failed read = not known, `ask_human`.
 
-Coder handoffs: a card the Ready sweep can take leaves `agent_slug` blank; an immediate handoff passes `get_default_coder`'s `agent_slug` as `slug` with the card's `notion_task_id`/Target (surface lookup failures). QA handoffs: `group_slug="qas"` after merge and verified deploy; `qa`/`qa-*` share dedup.
+Coder handoffs: a card the Ready sweep can take leaves `agent_slug` blank; an immediate handoff passes `get_default_coder`'s `agent_slug` as `slug` with the card's `notion_task_id`/Target. QA handoffs: `group_slug="qas"` after merge and verified deploy; `qa`/`qa-*` share dedup.
 
 ### Per failing flow
 `create_kanban_task(finding_key=f"ci:{repo}:{workflow}", title=f"CI failing: {workflow} on {repo}@{default_branch}", description=f"{conclusion} - {consecutive_failures} consecutive failure(s), latest at {latest_run_url}", plan="Latest run: <url>. Diagnose and fix the workflow so the next run on <default_branch> is green.", source="manager", plan_slug="github-maintenance", target_slug="github-maintenance-plan", priority="Medium", tags=["github","ci"])`; `finding_key` = gate `flow_key` prefixed `ci:`, kept stable.
@@ -181,7 +181,7 @@ Destinations 1-3 start a run: tell the agent to leave its conclusion as a card c
 
 ## Candidate list
 
-First call of the pass: `list_kanban_cards_need_attention(limit=25)`: merged In Progress + Need Human, server-sorted Priority -> `created_time` desc -> `LastSweptAt` asc. **Walk top-down, do not re-sort.** Each card carries `last_swept_at`, `last_edited_time`, `sweep_block`, `qa_status`, `child_cards`; use them instead of property fetches. No staleness filter or run-check is applied server-side. `truncated: true` goes in the report.
+First call of the pass: `list_kanban_cards_need_attention(limit=25)`: merged In Progress + Need Human, server-sorted Priority -> `created_time` desc -> `LastSweptAt` asc. **Walk top-down, do not re-sort.** Each card carries `last_swept_at`, `last_edited_time`, `sweep_block`, `qa_status`, `child_cards`; use them instead of property fetches. `truncated: true` goes in the report.
 
 **Window walking (mandatory; the same top cards recur every pass and are often all back-offs, epics, active runs or human-routed).** When the window is walked, the touch budget is NOT spent, and the response carries a non-null `next_offset`, call again with `offset=<next_offset>` until the budget is spent, `next_offset` is null, or 4 windows were read. Report windows read, `scanned`, and cards never reached. Never stop at the first window because it is full of skips.
 
@@ -258,7 +258,6 @@ A wake-up carries one `run_id` for one card; re-read that card fresh. Skipped/ba
    - **Dispatched run moved the card to `Need Human`** (status_at_touch was not): apply Layer B + matrix now: allowlisted reason -> `routed-human` naming the input (no second `ask_human` if the agent already asked); else route to coder/architect/PO. **One recovery hop per card per iteration**; a second bounce falls to SweepBlock.
    - **`success` with a new reply comment:** clean touch; clear SweepBlock if set.
 4. If step 3 dispatched a new route: `add_kanban_comment` + `register_callback(<new run_id>)`, keep the new triple, stamp at that wake-up. Otherwise stamp now: `set_kanban_property(page_id, "LastSweptAt", <now>)`, full ISO-8601 WITH time (e.g. `2026-11-06T04:03:17+00:00`, never date-only), computed fresh per card right before the call. On failure report and move on.
-Wake-up turns need only a short note.
 
 ## Not needed: archiving a moot card
 
