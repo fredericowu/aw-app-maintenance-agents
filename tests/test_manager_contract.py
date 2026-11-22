@@ -75,7 +75,9 @@ def test_aw_run_routing_precedes_badge_matrix():
     assert flat.index("`aw-run:` reasons first") < flat.index("Per PR by badge")
     for needle in ("`needs_human_label`: `ask_human` only, never a coder",
                    "never re-wake the same session", "`ask_unroutable`",
-                   "`aw_run.labels` has `devteam:needs-human` or is `null`"):
+                   "`aw_run.labels` has a `devteam:needs-human` or is `null`",
+                   "the `devteam:needs-human` PR label is retired under lifecycle v2",
+                   "v1-lifecycle caller"):
         assert needle in flat, needle
 
 
