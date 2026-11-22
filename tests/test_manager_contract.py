@@ -139,3 +139,10 @@ def test_awaiting_fixes_and_out_of_repo_have_a_coder_lane():
                    "`waiting_human` carries a reason and is the only genuine human hold"):
         assert needle in flat, needle
     assert flat.index("`awaiting_fixes`") < flat.index("Per PR by badge")
+
+
+def test_findings_work_order_defers_rules_to_the_skill():
+    flat = _flat()
+    assert "load the aw-code-review-response skill and act on PR <url>" in flat
+    assert "Never inline the rules" in flat
+    assert flat.count("`blocks_merge: true` at any severity") == 1
