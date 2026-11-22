@@ -127,3 +127,13 @@ def test_needs_human_removal_requires_every_completed_review_clean():
     assert "zero reviews never qualifies" in flat
     assert "a skipped or missing review does not count" in flat
     assert "a COMPLETED review of the current head found nothing blocking" not in flat
+
+
+def test_awaiting_fixes_and_out_of_repo_have_a_coder_lane():
+    flat = _flat()
+    for needle in ("`awaiting_fixes`", "fresh coder on the PR's EXISTING branch",
+                   "`out_of_repo`", "OWNING repo's worktree",
+                   "`blocks_merge: true` at any severity",
+                   "`waiting_human` carries a reason and is the only genuine human hold"):
+        assert needle in flat, needle
+    assert flat.index("`awaiting_fixes`") < flat.index("Per PR by badge")
