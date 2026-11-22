@@ -36,7 +36,7 @@ def test_core_safety_rules_survive_compaction():
         "Fixed 10 per invocation, any mode", "NEVER treat unevaluable as TRUE",
         "Never use the board's literal \"Not Needed\" option",
         "Never default to (a) on uncertainty", "Never merge directly",
-        "do NOT move the card to Need Human",
+        "do NOT move the card to Need Human", "Read-only with respect to code",
     ):
         assert needle in flat, needle
 
