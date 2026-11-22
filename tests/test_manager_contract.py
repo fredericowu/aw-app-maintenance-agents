@@ -146,3 +146,12 @@ def test_findings_work_order_defers_rules_to_the_skill():
     assert "load the aw-code-review-response skill and act on PR <url>" in flat
     assert "Never inline the rules" in flat
     assert flat.count("`blocks_merge: true` at any severity") == 1
+
+
+def test_idle_open_wakes_a_coder_with_the_short_order():
+    flat = _flat()
+    for needle in ("`idle_open`", "`attention_reason` starts `idle_open:`",
+                   "no run is acting on it", "never skip because the PR is already `devteam:reviewed`",
+                   "is in the PR's own diff they are NOT out of repo"):
+        assert needle in flat, needle
+    assert flat.index("`idle_open`") < flat.index("Per PR by badge")
