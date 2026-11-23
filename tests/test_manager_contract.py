@@ -277,3 +277,15 @@ def test_v2_manual_step_guard_yields_to_a_human_answer_before_rule_5():
     assert "NO answered `ask_human` or human comment newer than the parking" in block
     assert "skips 3b and goes to rule 5" in block
     assert pr < v2.index("5. Need Human card with an answered")
+
+
+def test_v2_runs_deploy_check_first_and_follows_verdicts():
+    flat = " ".join(V2_SKILL.read_text().split())
+    assert flat.index("## 0. Deploy check") < flat.index("## Input: dossier")
+    assert "kanban_check_deployed(dry_run=<this sweep's dry_run>)" in flat
+    assert "a dry run MUST pass `dry_run=true`" in flat
+    assert "`rolled_back`: route to the coder that delivered it" in flat
+    assert "never Need Human unless access is the blocker" in flat
+    assert "`invalid`: comment once" in flat
+    assert "fill `DeployComponent` / `DeployToVersion`" in flat
+    assert "`deployed` + not QA'd" in flat
