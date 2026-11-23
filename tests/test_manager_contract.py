@@ -286,6 +286,6 @@ def test_v2_runs_deploy_check_first_and_follows_verdicts():
     assert "a dry run MUST pass `dry_run=true`" in flat
     assert "`rolled_back`: route to the coder that delivered it" in flat
     assert "never Need Human unless access is the blocker" in flat
-    assert "`invalid`: comment once" in flat
+    assert "`invalid`: the tool already commented once" in flat and "do NOT comment again" in flat
     assert "fill `DeployComponent` / `DeployToVersion`" in flat
     assert "`deployed` + not QA'd" in flat
