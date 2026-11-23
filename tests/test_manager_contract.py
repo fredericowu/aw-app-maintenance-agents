@@ -226,3 +226,10 @@ def test_v2_loop_guard_split_and_stamp_budgets():
     assert "`skipped: true`" in v2 and v2.index("create_kanban_task") < v2.index("(3) `move_kanban_task(done)`")
     assert "15 per sweep" in v2 and "a stamp never spends it" in v2
     assert "`LastSweptAt`" in v2
+
+
+def test_v2_ci_rule_precedes_generic_pr_rule():
+    v2 = V2_SKILL.read_text()
+    ci = v2.index("3. CI card (checked BEFORE the generic PR rule")
+    pr = v2.index("4. Not a CI card")
+    assert ci < pr and "`green_after_since`" in v2[ci:pr]
