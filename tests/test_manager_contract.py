@@ -289,3 +289,6 @@ def test_v2_runs_deploy_check_first_and_follows_verdicts():
     assert "`invalid`: the tool already commented once" in flat and "do NOT comment again" in flat
     assert "fill `DeployComponent` / `DeployToVersion`" in flat
     assert "`deployed` + not QA'd" in flat
+    # Skip only once a coder run was actually dispatched after the comment.
+    assert "skip ONLY when it is true AND `list_runs(notion_task_id=<card>)`" in flat
+    assert "with no such run" in flat and "route again" in flat
