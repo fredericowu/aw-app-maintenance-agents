@@ -188,7 +188,7 @@ def test_v2_revalidates_before_routing_with_dossier_split_calls():
     assert v2.index("## 1. Revalidate the blocker FIRST") < v2.index("## 3. Still blocked")
     assert "min_idle_hours=2`" in v2 and "min_idle_hours=24`" in v2
     assert "`filter_stale_count=5` per call" in v2 and "never `gh`" in v2
-    assert "`run_cost_analytics(card_id=<card id>, repo=<repo>, workflow=<workflow>" in v2
+    assert "`run_cost_analytics(card_id=<card id>, repo=<repo>, workflow=<resolved filename or ID>" in v2
     assert "STAMP GATE" in v2 and "`card.last_swept_at` is newer than its latest fact" in v2
     assert "dry run refused inside a Plan iteration" in v2
     assert "`plan_iteration_id` on YOUR OWN run" in v2 and "Its only call is `finish_plan_iteration`" in v2
@@ -233,3 +233,12 @@ def test_v2_ci_rule_precedes_generic_pr_rule():
     ci = v2.index("3. CI card (checked BEFORE the generic PR rule")
     pr = v2.index("4. Not a CI card")
     assert ci < pr and "`green_after_since`" in v2[ci:pr]
+
+
+def test_v2_ci_rule_resolves_workflow_and_keeps_human_exit():
+    v2 = V2_SKILL.read_text()
+    ci = v2.index("3. CI card (checked BEFORE")
+    pr = v2.index("4. Not a CI card")
+    block = v2[ci:pr]
+    assert "resolve `<workflow>` to a workflow filename or numeric ID" in block
+    assert "continues to rule 5" in block
