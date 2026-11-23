@@ -266,3 +266,14 @@ def test_v2_ci_key_owner_drift_and_private_repo_rule():
 def test_v2_unreliable_discovery_stays_in_judgment():
     v2 = V2_SKILL.read_text()
     assert "means discovery is unreliable: stay in `judgment`, no `rule` verdict" in v2
+
+
+def test_v2_manual_step_guard_yields_to_a_human_answer_before_rule_5():
+    v2 = V2_SKILL.read_text()
+    guard = v2.index("3b. Manual-step guard (before rule 4)")
+    pr = v2.index("4. Not a CI card")
+    block = v2[guard:pr]
+    assert "`ask_human` pending" in block  # pending still parks
+    assert "NO answered `ask_human` or human comment newer than the parking" in block
+    assert "skips 3b and goes to rule 5" in block
+    assert pr < v2.index("5. Need Human card with an answered")
