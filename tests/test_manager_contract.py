@@ -292,3 +292,7 @@ def test_v2_runs_deploy_check_first_and_follows_verdicts():
     # Skip only once a coder run was actually dispatched after the comment.
     assert "skip ONLY when it is true AND `list_runs(notion_task_id=<card>)`" in flat
     assert "with no such run" in flat and "route again" in flat
+    # Rolled-back dispatch is deduped by observed version, not by sweep.
+    assert "Dedupe by the observed version, not by sweep" in flat
+    assert "unrelated coder run in flight does not block the handoff" in flat
+    assert "One dispatch per (card, observed version)" in flat
