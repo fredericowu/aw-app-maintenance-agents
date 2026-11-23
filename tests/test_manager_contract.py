@@ -155,3 +155,66 @@ def test_idle_open_wakes_a_coder_with_the_short_order():
                    "is in the PR's own diff they are NOT out of repo"):
         assert needle in flat, needle
     assert flat.index("`idle_open`") < flat.index("Per PR by badge")
+
+
+V2_SKILL = APP_DIR / "skills/aw-manager/stale-sweep-v2.md"
+
+
+def _v2() -> str:
+    return " ".join(V2_SKILL.read_text().split())
+
+
+def test_v2_selector_is_wired_from_skill_and_old_selector_untouched():
+    flat = _flat()
+    assert "`stale-sweep-v2`" in flat
+    assert "/opt/aw-workspace/skills/aw-manager/stale-sweep-v2.md" in flat
+    assert "`selector: stale-sweep` | `github-maintenance`" in flat
+    assert "Batch 1 takes `7 - priority`" in flat  # old cadence rules intact
+    assert V2_SKILL.exists() and "aw-manager/stale-sweep-v2.md" not in V2_SKILL.read_text()
+
+
+def test_v2_dry_run_is_default_and_performs_zero_writes():
+    v2 = _v2()
+    assert "DEFAULT `true`" in v2 and "ZERO writes and ZERO dispatches" in v2
+    for tool in ("move_kanban_task", "run_agent_async", "invoke_kanban_agent",
+                 "ask_human", "create_kanban_task", "SweepBlock"):
+        assert tool in v2.split("## Input")[0], tool
+    assert "rule-or-judgment" in v2 and "one table row per card" in v2.lower()
+    assert "never changes that" in v2
+
+
+def test_v2_revalidates_before_routing_with_dossier_split_calls():
+    v2 = _v2()
+    assert v2.index("## 1. Revalidate the blocker FIRST") < v2.index("## 3. Still blocked")
+    assert "`min_idle_hours=2`" in v2 and "`min_idle_hours=24`" in v2
+    assert "5 cards per call" in v2 and "never `gh`" in v2
+    assert "`run_cost_analytics(card_id=<card id>, repo=<repo>, workflow=<workflow>" in v2
+    assert "STAMP GATE" in v2 and "`LastSweptAt` is newer than its latest fact" in v2
+    assert "`finish_plan_iteration` (with" in v2 and "no `update_plan_memory`" in v2
+    assert "latest default-branch run of that workflow is green AND newer than" in v2
+
+
+def test_v2_routing_lanes_and_qa_merged_only():
+    v2 = _v2()
+    for needle in ("coder", "QA, MERGED work only", "`product-owner`", "`architect`",
+                   "Needs a deploy: coder", "never `qa_rerun`"):
+        assert needle in v2, needle
+
+
+def test_v2_need_human_only_for_show_stopper_next_to_the_condition():
+    v2 = _v2()
+    assert ("Need Human is for a wall no agent and no decision can remove. The Manager may "
+            "move a card there itself only when the blocker is a hard show stopper") in v2
+    assert "In doubt, it is a decision: call the PO." in v2
+    # every Need Human move sits in the guardrail section; no other section parks
+    assert v2.count("status=\"need_human\"") == 0
+    assert "routed-human|1|<iso>|<detail>" in v2
+
+
+def test_v2_loop_guard_split_and_stamp_budgets():
+    v2 = _v2()
+    assert "At 2 with an unchanged `head_sha`" in v2 and "never a third coder" in v2
+    assert "A NEW blocker key resets the count to 1" in v2
+    assert "`skipped: true`" in v2 and v2.index("create_kanban_task") < v2.index("(3) `move_kanban_task(done)`")
+    assert "15 per sweep" in v2 and "a stamp never spends it" in v2
+    assert "`LastSweptAt`" in v2
