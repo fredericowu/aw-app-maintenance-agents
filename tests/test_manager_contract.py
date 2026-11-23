@@ -188,6 +188,9 @@ def test_v2_revalidates_before_routing_with_dossier_split_calls():
     assert v2.index("## 1. Revalidate the blocker FIRST") < v2.index("## 3. Still blocked")
     assert "`min_idle_hours=2`" in v2 and "`min_idle_hours=24`" in v2
     assert "5 cards per call" in v2 and "never `gh`" in v2
+    assert "`run_cost_analytics(card_id=<card id>, repo=<repo>, workflow=<workflow>" in v2
+    assert "STAMP GATE" in v2 and "`LastSweptAt` is newer than its latest fact" in v2
+    assert "`finish_plan_iteration` (with" in v2 and "no `update_plan_memory`" in v2
     assert "latest default-branch run of that workflow is green AND newer than" in v2
 
 
