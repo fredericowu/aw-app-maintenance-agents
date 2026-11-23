@@ -242,3 +242,27 @@ def test_v2_ci_rule_resolves_workflow_and_keeps_human_exit():
     block = v2[ci:pr]
     assert "resolve `<workflow>` to a workflow filename or numeric ID" in block
     assert "continues to rule 5" in block
+
+
+def test_v2_manual_step_guard_precedes_pr_rule():
+    v2 = V2_SKILL.read_text()
+    guard = v2.index("3b. Manual-step guard (before rule 4)")
+    pr = v2.index("4. Not a CI card")
+    block = v2[guard:pr]
+    assert guard < pr
+    assert "Need Human card" in block and "`ask_human` pending" in block
+    assert "real device or Mac check" in block and "rule 4 does not apply" in block
+    assert "only when the stated blocker is the PR itself" in block
+
+
+def test_v2_ci_key_owner_drift_and_private_repo_rule():
+    v2 = V2_SKILL.read_text()
+    ci = v2.index("3. CI card (checked BEFORE")
+    block = v2[ci : v2.index("3b. Manual-step guard")]
+    assert "old owner `tekflox`" in block and "resolve the repo under `fredericowu` first" in block
+    assert "never unauthenticated `gh`" in block
+
+
+def test_v2_unreliable_discovery_stays_in_judgment():
+    v2 = V2_SKILL.read_text()
+    assert "means discovery is unreliable: stay in `judgment`, no `rule` verdict" in v2
