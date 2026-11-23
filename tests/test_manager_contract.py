@@ -190,8 +190,10 @@ def test_v2_revalidates_before_routing_with_dossier_split_calls():
     assert "`filter_stale_count=5` per call" in v2 and "never `gh`" in v2
     assert "`run_cost_analytics(card_id=<card id>, repo=<repo>, workflow=<workflow>" in v2
     assert "STAMP GATE" in v2 and "`card.last_swept_at` is newer than its latest fact" in v2
-    assert "dry run refused inside a Plan iteration" in v2 and "no `finish_plan_iteration`" in v2
-    assert "finish_plan_iteration` (with" not in v2
+    assert "dry run refused inside a Plan iteration" in v2
+    assert "`plan_iteration_id` on YOUR OWN run" in v2 and "Its only call is `finish_plan_iteration`" in v2
+    assert "`facts.unresolved_threads` == 0" in v2 and "unresolved_threads_open` alone" in v2
+    assert "min_idle_hours=0, honor_stamp=false" in v2 and "`latest_answered_at` newer than" in v2
     for key in ("`card.last_swept_at`", "`card.child_count`", "`facts.all_prs_merged`",
                 "`facts.merged_checks_failing` == 0", "`facts.discovery_complete`"):
         assert key in v2, key
