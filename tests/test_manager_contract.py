@@ -284,7 +284,7 @@ def test_v2_runs_deploy_check_first_and_follows_verdicts():
     assert flat.index("## 0. Deploy check") < flat.index("## Input: dossier")
     assert "kanban_check_deployed(dry_run=<this sweep's dry_run>)" in flat
     assert "a dry run MUST pass `dry_run=true`" in flat
-    assert "`rolled_back`: route to the coder that delivered it" in flat
+    assert "route to the coder that delivered it" in flat and "only reports it" in flat
     assert "never Need Human unless access is the blocker" in flat
     assert "`invalid`: the tool already commented once" in flat and "do NOT comment again" in flat
     assert "fill `DeployComponent` / `DeployToVersion`" in flat
