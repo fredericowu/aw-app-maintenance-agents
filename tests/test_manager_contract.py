@@ -186,11 +186,17 @@ def test_v2_dry_run_is_default_and_performs_zero_writes():
 def test_v2_revalidates_before_routing_with_dossier_split_calls():
     v2 = _v2()
     assert v2.index("## 1. Revalidate the blocker FIRST") < v2.index("## 3. Still blocked")
-    assert "`min_idle_hours=2`" in v2 and "`min_idle_hours=24`" in v2
-    assert "5 cards per call" in v2 and "never `gh`" in v2
+    assert "min_idle_hours=2`" in v2 and "min_idle_hours=24`" in v2
+    assert "`filter_stale_count=5` per call" in v2 and "never `gh`" in v2
     assert "`run_cost_analytics(card_id=<card id>, repo=<repo>, workflow=<workflow>" in v2
-    assert "STAMP GATE" in v2 and "`LastSweptAt` is newer than its latest fact" in v2
-    assert "`finish_plan_iteration` (with" in v2 and "no `update_plan_memory`" in v2
+    assert "STAMP GATE" in v2 and "`card.last_swept_at` is newer than its latest fact" in v2
+    assert "dry run refused inside a Plan iteration" in v2 and "no `finish_plan_iteration`" in v2
+    assert "finish_plan_iteration` (with" not in v2
+    for key in ("`card.last_swept_at`", "`card.child_count`", "`facts.all_prs_merged`",
+                "`facts.merged_checks_failing` == 0", "`facts.discovery_complete`"):
+        assert key in v2, key
+    assert "`statuses=in_progress, min_idle_hours=2`" in v2 and "`statuses=need_human, min_idle_hours=24`" in v2
+    assert "`green_after_since`" in v2
     assert "latest default-branch run of that workflow is green AND newer than" in v2
 
 
