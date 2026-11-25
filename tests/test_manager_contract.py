@@ -65,9 +65,18 @@ def test_plan_iteration_is_resolved_by_tool_call_not_prompt_text():
 
 def test_signal_a_uses_flow_needs_human_and_verifies_latest_run():
     flat = _flat()
-    assert "list_runs(limit=300, flow_needs_human=true)" in flat
+    assert "list_flow_needs_human_cards()" in flat
+    assert "limit=300" not in flat
+    assert "`truncated=true` or a tool error is a NAMED FAILURE" in flat
     assert "latest UNFILTERED run" in flat
-    assert "never read the ~1 MB response into context" in flat
+
+
+def test_every_gate_candidate_is_annotated_in_one_batch_before_finish():
+    flat = _flat()
+    assert "Every gate candidate gets an action AND a why" in flat
+    assert "items=[{card, action, why, disposition}" in flat
+    assert "a 409 lists the cards still missing action/why: annotate exactly those, retry once" in flat
+    assert "NO `items`" in flat and "keeping `carry`" in flat
 
 
 def test_aw_run_routing_precedes_badge_matrix():
