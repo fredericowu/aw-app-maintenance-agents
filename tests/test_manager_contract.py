@@ -310,7 +310,9 @@ def test_v2_runs_deploy_check_first_and_follows_verdicts():
 def test_qa_search_is_mandatory_before_human_routing():
     flat = _flat()
     for needle in ("Unblock first, Q&A search is a MUST", "qa_search", "knowledge_search",
-                   "never Need Human", "every (re)evaluation of a card"):
+                   "never Need Human", "every (re)evaluation of a card", "qa-unavailable",
+                   "never a negative result"):
         assert needle in flat, needle
     sweep = " ".join((APP_DIR / "skills/aw-manager/stale-sweep-v2.md").read_text().split())
     assert "rule 8" in sweep.lower() and "qa_search" in sweep
+    assert sweep.index("guards in rules 1 and 2") < sweep.index("follow rule 8")
