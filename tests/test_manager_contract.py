@@ -305,3 +305,12 @@ def test_v2_runs_deploy_check_first_and_follows_verdicts():
     assert "Dedupe by the observed version, not by sweep" in flat
     assert "unrelated coder run in flight does not block the handoff" in flat
     assert "One dispatch per (card, observed version)" in flat
+
+
+def test_qa_search_is_mandatory_before_human_routing():
+    flat = _flat()
+    for needle in ("Unblock first, Q&A search is a MUST", "qa_search", "knowledge_search",
+                   "never Need Human", "every (re)evaluation of a card"):
+        assert needle in flat, needle
+    sweep = " ".join((APP_DIR / "skills/aw-manager/stale-sweep-v2.md").read_text().split())
+    assert "rule 8" in sweep.lower() and "qa_search" in sweep
